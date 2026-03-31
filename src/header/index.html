@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Header Test</title>
+  <link rel="stylesheet" href="./src/header/Header.css">
+</head>
+<body>
+
+  <div id="app"></div>
+
+  <script type="module">
+    import { Header } from './src/header/Header.js';
+
+    document.getElementById('app').innerHTML = `
+      <header class="td-header">
+        <h1 class="td-header__title">Time Density</h1>
+      </header>
+    `;
+  </script>
+
+</body>
+</html>
