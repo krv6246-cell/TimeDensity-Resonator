@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Repurposed the archived `td-modules` repository as `TimeDensity-Resonator`.
-- Added the initial module definition and relationship to `TimeDensity-Core`.
-- Preserved legacy files for reference.
-- Added documentation and architecture placeholders.
+- Added the first Kotlin `ResonanceEngine` implementation.
+- Added deterministic matching, precision, stable-hold and transformation states.
+- Added unit tests for the initial state machine.
+- Kept UI, audio and game progression outside the core.
