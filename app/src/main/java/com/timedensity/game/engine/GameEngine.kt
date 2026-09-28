@@ -1,5 +1,6 @@
 package com.timedensity.game.engine
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.timedensity.game.audio.AudioEngine
@@ -61,6 +62,9 @@ class GameEngine : ViewModel() {
     private val blackHoleX = 0f
     private val blackHoleY = 0f
 
+    // Track the last active atom to detect changes
+    private var lastActiveAtomId: Int? = null
+
     fun startGame(newSeed: Long? = null) {
         gameJob?.cancel()
         
@@ -72,6 +76,7 @@ class GameEngine : ViewModel() {
         _blackHoleFlash.value = 0f
         atomIdCounter = 0
         random = Random(seedToUse)
+        lastActiveAtomId = null
         
         adapter.reset()
         audioEngine.start()
@@ -182,18 +187,61 @@ class GameEngine : ViewModel() {
             }
             _atoms.value = currentAtoms
 
-            // Resonance Core Update for the single active atom
+            // ===== RESONANCE CORE UPDATE =====
             val activeAtom = currentAtoms.firstOrNull { !it.isCapturing && !it.absorbed }
+
+            // Detect active atom change
+            val activeAtomChanged = activeAtom?.id != lastActiveAtomId
+
+            if (activeAtomChanged) {
+                Log.d(
+                    "AtomHunter",
+                    "ACTIVE_ATOM_CHANGED: lastId=$lastActiveAtomId newId=${activeAtom?.id} " +
+                        "symbol=${activeAtom?.element?.symbol} target=${activeAtom?.element?.frequency}"
+                )
+
+                // Reset adapter only once per atom change
+                if (activeAtom != null) {
+                    adapter.reset()
+                    Log.d(
+                        "AtomHunter",
+                        "adapter.reset() called: atomId=${activeAtom.id}"
+                    )
+                }
+
+                lastActiveAtomId = activeAtom?.id
+            }
+
             if (activeAtom != null) {
                 _targetFreq.value = activeAtom.element.frequency
                 audioEngine.setTargetFrequency(activeAtom.element.frequency)
-                
+
+                Log.d(
+                    "AtomHunter",
+                    "before adapter.update: atomId=${activeAtom.id} " +
+                        "target=${activeAtom.element.frequency} " +
+                        "carrier=${_carrierFreq.value} " +
+                        "phase=${_resonancePhase.value}"
+                )
+
                 val snapshot = adapter.update(activeAtom.element.frequency, _carrierFreq.value, dt)
                 _matchPercent.value = (snapshot.precision * 100).toInt()
                 _resonancePhase.value = snapshot.phase
                 _holdProgress.value = (snapshot.heldForMs / 800f).coerceIn(0f, 1f)
+
+                Log.d(
+                    "AtomHunter",
+                    "adapter.update result: atomId=${activeAtom.id} " +
+                        "phase=${snapshot.phase} " +
+                        "heldForMs=${snapshot.heldForMs} " +
+                        "precision=${snapshot.precision}"
+                )
                 
                 if (snapshot.phase == ResonancePhase.STABLE) {
+                    Log.d(
+                        "AtomHunter",
+                        "STABLE reached: atomId=${activeAtom.id} calling transform()"
+                    )
                     adapter.transform()
                     startCapture(activeAtom)
                 }
@@ -203,7 +251,7 @@ class GameEngine : ViewModel() {
                 _matchPercent.value = 0
                 _resonancePhase.value = ResonancePhase.IDLE
                 _holdProgress.value = 0f
-                adapter.reset()
+                // DO NOT reset adapter here; reset happens only when activeAtom changes
             }
 
             delay(16) // ~60fps
@@ -234,6 +282,11 @@ class GameEngine : ViewModel() {
             orbitSpeed = startSpeed
         )
         _atoms.value = _atoms.value + newAtom
+        
+        Log.d(
+            "AtomHunter",
+            "spawnAtom: id=${newAtom.id} symbol=${element.symbol} target=${element.frequency}"
+        )
     }
     
     private suspend fun timerLoop() {
@@ -260,6 +313,7 @@ class GameEngine : ViewModel() {
         _phase.value = GamePhase.START
         audioEngine.stop()
         adapter.reset()
+        lastActiveAtomId = null
     }
     
     override fun onCleared() {
@@ -268,4 +322,3 @@ class GameEngine : ViewModel() {
         audioEngine.stop()
     }
 }
-
