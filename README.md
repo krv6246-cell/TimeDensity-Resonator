@@ -1,85 +1,46 @@
-# TimeDensity-Resonator
+# ATOM HUNTER
+**Powered by Time Density**
 
-Reusable resonance module for frequency-based games, applications, and interactive systems.
+ATOM HUNTER is an experimental game mode built on top of the **REZONATOR** technical core. It transforms frequency-tuning mechanics into a challenging visual and auditory hunt for atomic elements.
 
-## Purpose
+## Architecture
 
-`TimeDensity-Resonator` is the technical home for the Resonator concept: a reusable system that lets a player or application tune a carrier toward a target frequency, detect resonance, preserve stability, and transform the result into a meaningful state.
+- **REZONATOR**: The underlying technical core and engine processing frequency tolerance and matching mathematics. It relies on the external `:core` module (`ResonanceEngine`).
+- **ATOM HUNTER**: The game mode UI and gameplay loop implemented using Jetpack Compose and MVVM (`GameEngine`, `GameUI`).
+- **ResonatorGameAdapter**: The translation layer mapping game rules (hysteresis, magnetic snap, extended hold durations) to the strict `ResonanceEngine` without modifying the core directly.
 
-This repository is **not only one game**. It is a modular foundation that can later power: 
+## Gameplay Mechanics
 
-- atomic and molecular resonance simulations;
-- educational chemistry experiences;
-- frequency-based games;
-- sound and music interaction;
-- interactive visual systems built around matching and stability.
+The player tunes a Carrier frequency using the TUNE slider to hunt for elements. The resonance lifecycle follows three strict phases:
 
-## Relationship with Time Density
+1. **MATCHED**: The Carrier frequency enters the accepted entry tolerance zone (±30 Hz) of the Target element's frequency.
+2. **STABLE**: The player holds the frequency within the exit tolerance zone (±50 Hz) for a specific duration (800 ms). Hysteresis and grace periods prevent micro-movements from failing the capture instantly.
+3. **TRANSFORMED**: The atom is successfully captured.
 
-- `TimeDensity-Core` contains the paradigm, terminology, and conceptual model.
-- `TimeDensity-Resonator` turns the resonance part of that model into reusable technical architecture.
-- Future games and applications consume the module instead of redefining resonance independently.
+Once captured, the atom is pulled into the central **ATOM VAULT** (a pulsing cosmic black hole) through a spiral animation accompanied by a golden flash, and its count is added to the player's collection.
 
-The external philosophical and academic sources are context only. The module is defined by its own documentation, code, tests, and version history.
+## Features
 
-## Initial model
+- **TUNE Slider**: A precise gradient slider with magnetic snap feedback (`±12 Hz`) assisting the player in locking onto frequencies.
+- **WaveformDisplay**: A live visual oscilloscope plotting the `Target` (Neon Violet) and `Carrier` (Electric Cyan) waves, reacting with a golden glow when resonance is stable.
+- **ATOM VAULT**: Visual collection tracking the player's catch of six distinct elements.
 
-```text
-Potential → Resonance → Point Zero → Transformation
+### Target Elements
+| Element | Symbol | Frequency (Hz) |
+|---|---|---|
+| Hydrogen | H | 659 |
+| Helium | He | 392 |
+| Carbon | C | 293 |
+| Nitrogen | N | 261 |
+| Oxygen | O | 220 |
+| Iron | Fe | 110 |
+
+## Current Limitations & Future Plans
+- The ATOM VAULT currently only tracks the element counts. Future updates will introduce mechanics to forge captured matter into a new universe and generate a musical composition out of the caught frequencies.
+- Only the 6 baseline elements are implemented.
+
+## Running the Project
 ```
-
-At the technical level:
-
-```text
-target frequency + carrier frequency
-            ↓
-         TUNE input
-            ↓
-       match / precision
-            ↓
-        stable resonance
-            ↓
-      state transformation
+./gradlew app:assembleDebug
+./gradlew core:test
 ```
-
-## Planned architecture
-
-```text
-TimeDensity-Resonator/
-├── README.md
-├── CHANGELOG.md
-├── docs/
-│   ├── concept.md
-│   ├── resonance-model.md
-│   └── architecture.md
-├── core/
-│   └── README.md
-├── examples/
-│   └── README.md
-├── tests/
-└── legacy/
-```
-
-The current legacy files from `td-modules` are preserved during the transition. They are not part of the new public API.
-
-## First implementation target
-
-The first working implementation will be platform-neutral and small:
-
-1. define a target frequency;
-2. expose a continuous TUNE/carrier value;
-3. calculate match and precision;
-4. detect a stable resonance window;
-5. emit state changes for a host game or application.
-
-The first application of the module is the REZONATOR atomic-scale simulator. The module must remain reusable beyond that application.
-
-## Status
-
-**Stage 0: architecture and documentation.**
-
-No stable public API has been declared yet. Breaking changes are expected until the first core implementation and tests are complete.
-
-## License
-
-To be defined before the first public release.
