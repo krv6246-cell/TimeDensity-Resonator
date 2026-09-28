@@ -1,5 +1,6 @@
 package com.timedensity.game.engine
 
+import android.util.Log
 import com.timedensity.resonator.core.ResonanceConfig
 import com.timedensity.resonator.core.ResonanceEngine
 import com.timedensity.resonator.core.ResonancePhase
@@ -30,6 +31,11 @@ class ResonatorGameAdapter {
 
         // Set target if changed
         if (currentTarget != targetFreq) {
+            Log.d(
+                "AtomHunter",
+                "adapter.setTarget: oldTarget=$currentTarget newTarget=$targetFreq " +
+                    "wasMatched=$wasMatched graceTimerMs=$graceTimerMs softDropTimerMs=$softDropTimerMs"
+            )
             core.setTargetFrequency(targetFreq.toDouble())
             currentTarget = targetFreq
             wasMatched = false
@@ -77,6 +83,13 @@ class ResonatorGameAdapter {
 
         var snapshot = core.update(effectiveCarrier.toDouble(), effectiveDtMs)
 
+        Log.d(
+            "AtomHunter",
+            "adapter.update: targetFreq=$targetFreq effectiveCarrier=$effectiveCarrier " +
+                "phase=${snapshot.phase} heldForMs=${snapshot.heldForMs} " +
+                "precision=${snapshot.precision} wasMatched=$wasMatched currentTarget=$currentTarget"
+        )
+
         // Soft drop override: visually step down to MATCHED instead of jumping to TUNING instantly
         if (!wasMatched && (snapshot.phase == ResonancePhase.TUNING || snapshot.phase == ResonancePhase.IDLE)) {
             if (softDropTimerMs < 300L) { // 300ms soft drop visualization
@@ -96,10 +109,24 @@ class ResonatorGameAdapter {
     }
 
     fun transform(): ResonanceSnapshot {
-        return core.transform()
+        Log.d(
+            "AtomHunter",
+            "adapter.transform BEFORE: currentTarget=$currentTarget wasMatched=$wasMatched"
+        )
+        val result = core.transform()
+        Log.d(
+            "AtomHunter",
+            "adapter.transform AFTER: phase=${result.phase} heldForMs=${result.heldForMs}"
+        )
+        return result
     }
 
     fun reset() {
+        Log.d(
+            "AtomHunter",
+            "adapter.reset: currentTarget=$currentTarget wasMatched=$wasMatched " +
+                "graceTimerMs=$graceTimerMs softDropTimerMs=$softDropTimerMs"
+        )
         core.reset()
         currentTarget = null
         wasMatched = false
