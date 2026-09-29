@@ -1,22 +1,16 @@
 package com.timedensity.game.audio
 
+import java.util.concurrent.CopyOnWriteArrayList
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.util.Log
 import com.timedensity.game.model.Element
-import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.sin
 
 class AudioEngine {
-    private val sampleRate = 44_100
-    private val audioLock = Any()
-
-    @Volatile
+    private val sampleRate = 44100
     private var isPlaying = false
-    @Volatile
-    private var isMelodyPlaying = false
-
     private var audioTrack: AudioTrack? = null
     private var thread: Thread? = null
 
@@ -24,90 +18,105 @@ class AudioEngine {
     private var targetFreq = 0f
     private var volume = 0.5f
 
+    // Tone generators - thread-safe collection
     private val activeTones = CopyOnWriteArrayList<Float>()
-    private val capturedSequence = CopyOnWriteArrayList<Float>()
 
+    // Melody recording and playback
+    private val capturedSequence = CopyOnWriteArrayList<Float>()
+    @Volatile
+    private var isMelodyPlaying = false
     private var melodyDurationMs = 600L
     private var melodyStartedAtMs = 0L
 
     fun start() {
-        synchronized(audioLock) {
-            if (isPlaying) return
-            isPlaying = true
+        if (isPlaying) return
+        isPlaying = true
 
-            val minSize = AudioTrack.getMinBufferSize(
-                sampleRate,
-                AudioFormat.CHANNEL_OUT_MONO,
-                AudioFormat.ENCODING_PCM_16BIT
+        val minSize = AudioTrack.getMinBufferSize(
+            sampleRate,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT
+        )
+
+        audioTrack = AudioTrack.Builder()
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_GAME)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
             )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(sampleRate)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+            )
+            .setBufferSizeInBytes(minSize)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .build()
 
-            audioTrack = AudioTrack.Builder()
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_GAME)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
-                )
-                .setAudioFormat(
-                    AudioFormat.Builder()
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                        .setSampleRate(sampleRate)
-                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                        .build()
-                )
-                .setBufferSizeInBytes(minSize)
-                .setTransferMode(AudioTrack.MODE_STREAM)
-                .build()
+        audioTrack?.play()
 
-            audioTrack?.play()
+        thread = Thread {
+            val buffer = ShortArray(minSize)
+            var angleCarrier = 0.0
+            var angleTarget = 0.0
+            var angleDrone = 0.0
+            var melodyPhase = 0.0
 
-            thread = Thread {
-                val buffer = ShortArray(minSize)
-                var angleCarrier = 0.0
-                var angleTarget = 0.0
-                var angleDrone = 0.0
-                var melodyPhase = 0.0
+            while (isPlaying) {
+                for (i in buffer.indices) {
+                    val droneSample = sin(angleDrone) * 0.1 // 50 Hz drone
+                    val carrierSample = sin(angleCarrier) * 0.2
+                    val targetSample = if (targetFreq > 0) sin(angleTarget) * 0.2 else 0.0
+                    
+                    var sum = droneSample + carrierSample + targetSample
+                    
+                    // Add active stabilized tones (safe iteration)
+                    val tonesSnapshot = activeTones.toList()
+                    for (freq in tonesSnapshot) {
+                        val phase = (angleCarrier / carrierFreq) * freq // simplistic phase
+                        sum += sin(phase) * 0.1
+                    }
 
-                while (isPlaying) {
-                    val safeActiveTones = activeTones.toList()
+                    // Melody playback with proper note cycling
+                    if (isMelodyPlaying && capturedSequence.isNotEmpty()) {
+                        val elapsed = System.currentTimeMillis() - melodyStartedAtMs
+                        val totalDuration = capturedSequence.size * melodyDurationMs
 
-                    for (i in buffer.indices) {
-                        val droneSample = sin(angleDrone) * 0.08
-                        val carrierSample = sin(angleCarrier) * 0.18
-                        val targetSample = if (targetFreq > 0f) sin(angleTarget) * 0.18 else 0.0
-
-                        var sum = droneSample + carrierSample + targetSample
-
-                        // Additional stable tones, safely iterated from a snapshot
-                        for (freq in safeActiveTones) {
-                            sum += sin((angleCarrier / carrierFreq) * freq) * 0.08
-                        }
-
-                        if (isMelodyPlaying && capturedSequence.isNotEmpty()) {
-                            val elapsed = System.currentTimeMillis() - melodyStartedAtMs
-                            val noteIndex = (elapsed / melodyDurationMs).toInt().coerceAtMost(capturedSequence.size - 1)
+                        if (elapsed >= totalDuration) {
+                            // Melody finished
+                            isMelodyPlaying = false
+                            Log.d(
+                                "AtomHunter",
+                                "Melody playback finished: totalDuration=$totalDuration elapsed=$elapsed"
+                            )
+                        } else {
+                            // Determine current note and phase
+                            val noteIndex = (elapsed / melodyDurationMs).toInt()
+                                .coerceIn(0, capturedSequence.size - 1)
                             val freq = capturedSequence[noteIndex]
                             val notePhase = elapsed % melodyDurationMs
                             val envelope = computeEnvelope(notePhase, melodyDurationMs)
+
                             sum += sin(melodyPhase) * 0.25 * envelope
                             melodyPhase += 2.0 * Math.PI * freq / sampleRate
                         }
-
-                        sum = sum.coerceIn(-1.0, 1.0)
-                        buffer[i] = (sum * Short.MAX_VALUE * volume).toInt().toShort()
-
-                        angleDrone += 2.0 * Math.PI * 50.0 / sampleRate
-                        angleCarrier += 2.0 * Math.PI * carrierFreq / sampleRate
-                        angleTarget += 2.0 * Math.PI * targetFreq / sampleRate
                     }
 
-                    audioTrack?.write(buffer, 0, buffer.size)
-                }
-            }
+                    // Soft clip
+                    sum = sum.coerceIn(-1.0, 1.0)
+                    buffer[i] = (sum * Short.MAX_VALUE * volume).toInt().toShort()
 
-            thread?.start()
-            Log.d("AtomHunter", "AudioEngine.start()")
+                    angleDrone += 2.0 * Math.PI * 50.0 / sampleRate
+                    angleCarrier += 2.0 * Math.PI * carrierFreq / sampleRate
+                    angleTarget += 2.0 * Math.PI * targetFreq / sampleRate
+                }
+                audioTrack?.write(buffer, 0, buffer.size)
+            }
         }
+        thread?.start()
     }
 
     private fun computeEnvelope(notePhaseMs: Long, noteDurationMs: Long): Float {
@@ -139,12 +148,12 @@ class AudioEngine {
     fun setTargetFrequency(freq: Float) {
         targetFreq = freq
     }
-
+    
     fun playElementTone(element: Element) {
+        // Just add to active tones for now
         activeTones.add(element.frequency)
-        Log.d("AtomHunter", "playElementTone: ${element.symbol} ${element.frequency}Hz")
     }
-
+    
     fun clearTones() {
         activeTones.clear()
     }
@@ -153,7 +162,7 @@ class AudioEngine {
         capturedSequence.add(element.frequency)
         Log.d(
             "AtomHunter",
-            "recordElementCapture: symbol=${element.symbol} frequency=${element.frequency} " +
+            "recordElementCapture: symbol=${element.symbol} freq=${element.frequency} " +
                 "sequenceSize=${capturedSequence.size}"
         )
     }
@@ -190,14 +199,12 @@ class AudioEngine {
     fun isMelodyPlaying(): Boolean = isMelodyPlaying
 
     fun stop() {
-        synchronized(audioLock) {
-            isPlaying = false
-            isMelodyPlaying = false
-            thread?.join(1000)
-            audioTrack?.stop()
-            audioTrack?.release()
-            audioTrack = null
-            Log.d("AtomHunter", "AudioEngine.stop()")
-        }
+        isPlaying = false
+        isMelodyPlaying = false
+        thread?.join()
+        audioTrack?.stop()
+        audioTrack?.release()
+        audioTrack = null
+        Log.d("AtomHunter", "AudioEngine.stop()")
     }
 }
