@@ -44,7 +44,7 @@ class GameEngine : ViewModel() {
     private val _holdProgress = MutableStateFlow(0f)
     val holdProgress: StateFlow<Float> = _holdProgress.asStateFlow()
 
-    private val _timeRemaining = MutableStateFlow(180) // 3 minutes
+    private val _timeRemaining = MutableStateFlow(120) // 2 minutes for final version
     val timeRemaining: StateFlow<Int> = _timeRemaining.asStateFlow()
 
     private val _stabilizedCount = MutableStateFlow<Map<Element, Int>>(emptyMap())
@@ -52,6 +52,9 @@ class GameEngine : ViewModel() {
 
     private val _blackHoleFlash = MutableStateFlow(0f)
     val blackHoleFlash: StateFlow<Float> = _blackHoleFlash.asStateFlow()
+
+    private val _capturedSequence = MutableStateFlow<List<Element>>(emptyList())
+    val capturedSequence: StateFlow<List<Element>> = _capturedSequence.asStateFlow()
 
     private var atomIdCounter = 0
     private var random = Random(42)
@@ -70,17 +73,21 @@ class GameEngine : ViewModel() {
         
         val seedToUse = newSeed ?: System.currentTimeMillis()
         _phase.value = GamePhase.PLAYING
-        _timeRemaining.value = 180
+        _timeRemaining.value = 120
         _atoms.value = emptyList()
         _stabilizedCount.value = emptyMap()
+        _capturedSequence.value = emptyList()
         _blackHoleFlash.value = 0f
         atomIdCounter = 0
         random = Random(seedToUse)
         lastActiveAtomId = null
         
         adapter.reset()
+        audioEngine.clearMelodySequence()
         audioEngine.start()
         audioEngine.clearTones()
+        
+        Log.d("AtomHunter", "startGame: seed=$seedToUse")
         
         gameJob = viewModelScope.launch {
             launch { timerLoop() }
@@ -112,8 +119,22 @@ class GameEngine : ViewModel() {
             map[activeAtom.element] = (map[activeAtom.element] ?: 0) + 1
             _stabilizedCount.value = map
             
+            // Record capture in audio engine for melody
+            audioEngine.recordElementCapture(activeAtom.element)
+            
+            // Update captured sequence for result screen
+            val seq = _capturedSequence.value.toMutableList()
+            seq.add(activeAtom.element)
+            _capturedSequence.value = seq
+            
             // Play element tone once
             audioEngine.playElementTone(activeAtom.element)
+            
+            Log.d(
+                "AtomHunter",
+                "startCapture: atomId=${activeAtom.id} symbol=${activeAtom.element.symbol} " +
+                    "capturedCount=${map[activeAtom.element]} sequenceSize=${seq.size}"
+            )
         }
     }
 
@@ -133,9 +154,10 @@ class GameEngine : ViewModel() {
                 _blackHoleFlash.value = (_blackHoleFlash.value - dt * 2f).coerceAtLeast(0f)
             }
 
-            // Spawn Atoms: spawn a new one if no active (non-capturing) atoms exist
+            // Spawn Atoms: spawn a new one if no active non-capturing, non-absorbed atoms exist
             spawnTimer += dt
-            if (spawnTimer > 1f && _atoms.value.count { !it.isCapturing && !it.absorbed } == 0) {
+            val activeNonCapturingAtoms = _atoms.value.count { !it.isCapturing && !it.absorbed }
+            if (spawnTimer > 0.8f && activeNonCapturingAtoms == 0) {
                 spawnTimer = 0f
                 spawnAtom()
             }
@@ -144,7 +166,7 @@ class GameEngine : ViewModel() {
             val currentAtoms = mutableListOf<Atom>()
             for (atom in _atoms.value) {
                 if (atom.absorbed) {
-                    currentAtoms.add(atom)
+                    // Keep absorbed atoms in list briefly for cleanup, then skip rendering
                     continue
                 }
 
@@ -152,8 +174,13 @@ class GameEngine : ViewModel() {
                     // Spiral capture duration ~1000ms
                     val progress = atom.captureProgress + dt / 1.0f 
                     if (progress >= 1.0f) {
-                        // Animation finished, trigger flash and remove
+                        // Animation finished, mark as absorbed
+                        Log.d(
+                            "AtomHunter",
+                            "CAPTURE_COMPLETE: atomId=${atom.id} symbol=${atom.element.symbol}"
+                        )
                         _blackHoleFlash.value = 1f
+                        currentAtoms.add(atom.copy(absorbed = true))
                     } else {
                         // Spiral into the center
                         // 1.5 rotations during capture
@@ -205,7 +232,7 @@ class GameEngine : ViewModel() {
                     adapter.reset()
                     Log.d(
                         "AtomHunter",
-                        "adapter.reset() called: atomId=${activeAtom.id}"
+                        "adapter.reset() called: atomId=${activeAtom.id} symbol=${activeAtom.element.symbol}"
                     )
                 }
 
@@ -227,7 +254,7 @@ class GameEngine : ViewModel() {
                 val snapshot = adapter.update(activeAtom.element.frequency, _carrierFreq.value, dt)
                 _matchPercent.value = (snapshot.precision * 100).toInt()
                 _resonancePhase.value = snapshot.phase
-                _holdProgress.value = (snapshot.heldForMs / 800f).coerceIn(0f, 1f)
+                _holdProgress.value = (snapshot.heldForMs / 1200f).coerceIn(0f, 1f)
 
                 Log.d(
                     "AtomHunter",
@@ -285,7 +312,8 @@ class GameEngine : ViewModel() {
         
         Log.d(
             "AtomHunter",
-            "spawnAtom: id=${newAtom.id} symbol=${element.symbol} target=${element.frequency}"
+            "spawnAtom: id=${newAtom.id} symbol=${element.symbol} target=${element.frequency} " +
+                "totalAtoms=${_atoms.value.size}"
         )
     }
     
@@ -295,6 +323,7 @@ class GameEngine : ViewModel() {
             _timeRemaining.value -= 1
         }
         if (_timeRemaining.value <= 0 && _phase.value == GamePhase.PLAYING) {
+            Log.d("AtomHunter", "TIME_EXPIRED: transitioning to COLLAPSE")
             _phase.value = GamePhase.COLLAPSE
             startCollapse()
         }
@@ -304,6 +333,10 @@ class GameEngine : ViewModel() {
         viewModelScope.launch {
             // Wait out any capturing animations
             delay(2000)
+            Log.d(
+                "AtomHunter",
+                "COLLAPSE_FINISHED: transitioning to RESULT, capturedCount=${_capturedSequence.value.size}"
+            )
             _phase.value = GamePhase.RESULT
         }
     }
@@ -314,6 +347,7 @@ class GameEngine : ViewModel() {
         audioEngine.stop()
         adapter.reset()
         lastActiveAtomId = null
+        Log.d("AtomHunter", "resetToHome")
     }
     
     override fun onCleared() {
