@@ -1,5 +1,6 @@
 package com.timedensity.game.audio
 
+import java.util.concurrent.CopyOnWriteArrayList
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -17,8 +18,8 @@ class AudioEngine {
     private var targetFreq = 0f
     private var volume = 0.5f
 
-    // Tone generators
-    private val activeTones = mutableListOf<Float>()
+    // Tone generators - thread-safe collection
+    private val activeTones = CopyOnWriteArrayList<Float>()
 
     fun start() {
         if (isPlaying) return
