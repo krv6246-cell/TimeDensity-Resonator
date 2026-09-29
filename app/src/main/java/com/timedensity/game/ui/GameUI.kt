@@ -5,32 +5,34 @@ import android.graphics.RectF
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -501,13 +503,11 @@ fun GameScreen(engine: GameEngine) {
 @Composable
 fun ParticleField() {
     Canvas(modifier = Modifier.fillMaxSize()) {
-        // Just a simple static cosmic field for now
-        // A real implementation would animate these
         val random = Random(123)
         for (i in 0..100) {
             val x = random.nextFloat() * size.width
             val y = random.nextFloat() * size.height
-            val color = if (random.nextBoolean()) Color(0xFFFF7F50) else Color(0xFF708090) // red/orange or blue/gray
+            val color = if (random.nextBoolean()) Color(0xFFFF7F50) else Color(0xFF708090)
             drawCircle(
                 color = color.copy(alpha = random.nextFloat() * 0.5f),
                 radius = random.nextFloat() * 3.dp.toPx(),
@@ -560,7 +560,6 @@ fun WaveformDisplay(target: Float, carrier: Float, resPhase: ResonancePhase = Re
             
             for (x in 0..width.toInt() step 2) {
                 val px = x.toFloat()
-                // Simplified visualization of frequency
                 val ty = midY + sin((px / width) * (target / 15f) + phase) * (size.height / 3)
                 val cy = midY + sin((px / width) * (carrier / 15f) + phase * 1.5f) * (size.height / 3)
                 
@@ -606,7 +605,6 @@ fun TuneSlider(target: Float, carrier: Float, onFreqChange: (Float) -> Unit, mod
                     val newX = (change.position.x / width).coerceIn(0f, 1f)
                     val rawFreq = minFreq + newX * range
                     
-                    // Magnetic snap feedback at 10Hz
                     val activeFreq = if (target > 0f && abs(rawFreq - target) <= 10f) target else rawFreq
                     onFreqChange(activeFreq)
                 }
@@ -616,7 +614,6 @@ fun TuneSlider(target: Float, carrier: Float, onFreqChange: (Float) -> Unit, mod
             val trackHeight = 12.dp.toPx()
             val midY = size.height / 2
             
-            // Gradient track
             val trackRect = RoundRect(
                 rect = Rect(
                     left = 0f, 
@@ -634,22 +631,17 @@ fun TuneSlider(target: Float, carrier: Float, onFreqChange: (Float) -> Unit, mod
                 )
             )
             
-            // Target frequency visual zone
             if (target > 0f) {
                 val targetPos = ((target - minFreq) / range).coerceIn(0f, 1f)
                 val targetX = targetPos * size.width
-                
-                // Entry tolerance is 25 Hz. So total visual width is 50 Hz.
                 val zoneWidth = (50f / range) * size.width
                 
-                // Draw target area
                 drawRect(
                     color = Color(0xFFB04CFF).copy(alpha = 0.4f),
                     topLeft = Offset(targetX - zoneWidth / 2, midY - trackHeight),
                     size = Size(zoneWidth, trackHeight * 2)
                 )
                 
-                // Draw exact target line
                 drawLine(
                     color = Color(0xFFB04CFF),
                     start = Offset(targetX, midY - trackHeight * 1.5f),
@@ -658,25 +650,21 @@ fun TuneSlider(target: Float, carrier: Float, onFreqChange: (Float) -> Unit, mod
                 )
             }
             
-            // Thumb
             val thumbX = currentPos * size.width
             val thumbRadius = if (isDragging) 20.dp.toPx() else 16.dp.toPx()
             
-            // Thumb glow
             drawCircle(
                 color = Color.White.copy(alpha = 0.3f),
                 radius = thumbRadius * 1.5f,
                 center = Offset(thumbX, midY)
             )
             
-            // Thumb core
             drawCircle(
                 color = Color.White,
                 radius = thumbRadius,
                 center = Offset(thumbX, midY)
             )
             
-            // Center dot
             drawCircle(
                 color = Color(0xFF050816),
                 radius = thumbRadius * 0.4f,
@@ -688,53 +676,310 @@ fun TuneSlider(target: Float, carrier: Float, onFreqChange: (Float) -> Unit, mod
 
 @Composable
 fun ResultScreen(engine: GameEngine) {
+    val sequence by engine.capturedSequence.collectAsState()
     val stats by engine.stabilizedCount.collectAsState()
-    
+    val playingIndex by engine.playingNoteIndex.collectAsState()
+    val isMelodyPlaying by engine.isMelodyPlaying.collectAsState()
+
+    var animTrigger by remember { mutableStateOf(0) }
+    val animProgress = remember { Animatable(0f) }
+
+    LaunchedEffect(animTrigger) {
+        animProgress.snapTo(0f)
+        animProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 2500, easing = FastOutSlowInEasing)
+        )
+    }
+
+    val pulseAnim = remember { Animatable(0f) }
+    LaunchedEffect(playingIndex) {
+        if (playingIndex >= 0) {
+            pulseAnim.snapTo(1f)
+            pulseAnim.animateTo(0f, animationSpec = tween(350))
+        }
+    }
+
     Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 36.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("ATOM VAULT", fontSize = 48.sp, color = Color.White, fontWeight = FontWeight.Light, letterSpacing = 4.sp)
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        // Abstract representation
-        Canvas(modifier = Modifier.size(200.dp)) {
-            val center = Offset(size.width / 2, size.height / 2)
-            stats.forEach { (element, count) ->
-                drawCircle(
-                    color = element.color.copy(alpha = 0.3f),
-                    radius = (40 + count * 10).dp.toPx(),
-                    center = center
-                )
-            }
-            drawCircle(color = Color.White, radius = 10.dp.toPx(), center = center)
-        }
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        Element.values().forEach { element ->
-            val count = stats[element] ?: 0
-            Text("${element.symbol} × $count", color = element.color, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        }
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        Text("COLLECTION READY FOR TRANSFORMATION", color = Color(0xFFFFBF00), fontSize = 14.sp, letterSpacing = 2.sp)
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        Row {
-            Button(onClick = { /* SAVE MELODY */ }) { Text("SAVE COLLECTION") }
-            Spacer(modifier = Modifier.width(16.dp))
-            Button(onClick = { /* SAVE IMAGE */ }) { Text("SAVE IMAGE") }
-        }
+        // 1. Header
+        Text(
+            text = "ATOM HUNT COMPLETE",
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF00D9FF),
+            letterSpacing = 3.sp
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            text = "${sequence.size} ATOMS CAPTURED",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color(0xFFFFBF00),
+            letterSpacing = 2.sp
+        )
+
         Spacer(modifier = Modifier.height(16.dp))
-        Row {
-            Button(onClick = { 
-                engine.startGame()
-            }) { Text("NEW HUNT") }
-            Spacer(modifier = Modifier.width(16.dp))
-            Button(onClick = { engine.resetToHome() }) { Text("HOME") }
+
+        // 2. Black Hole / Universe Visual Animation Canvas
+        Box(
+            modifier = Modifier
+                .size(180.dp)
+                .clip(CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val center = Offset(size.width / 2, size.height / 2)
+                val maxRadius = size.width / 2
+                val progress = animProgress.value
+                val pulse = pulseAnim.value
+
+                if (progress < 0.7f) {
+                    val compressFactor = if (progress < 0.4f) 1f else 1f - ((progress - 0.4f) / 0.3f)
+                    val baseRadius = maxRadius * 0.7f * compressFactor
+
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(Color(0xFFB04CFF).copy(alpha = 0.5f * compressFactor), Color.Transparent),
+                            center = center,
+                            radius = maxRadius
+                        ),
+                        radius = maxRadius,
+                        center = center
+                    )
+
+                    drawCircle(
+                        color = Color(0xFF050816),
+                        radius = baseRadius * 0.5f,
+                        center = center
+                    )
+
+                    val atomCount = sequence.size.coerceAtMost(12)
+                    for (i in 0 until atomCount) {
+                        val angle = (i * (2 * Math.PI / atomCount) + progress * 4 * Math.PI).toFloat()
+                        val orbitR = baseRadius * (0.6f + 0.3f * sin(i * 1.5).toFloat())
+                        val x = center.x + cos(angle) * orbitR
+                        val y = center.y + sin(angle) * orbitR
+                        val elem = sequence[i % sequence.size]
+
+                        drawCircle(
+                            color = elem.color,
+                            radius = 6.dp.toPx() * compressFactor,
+                            center = Offset(x, y)
+                        )
+                    }
+                } else {
+                    val expandFactor = (progress - 0.7f) / 0.3f
+
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 1f - expandFactor),
+                                Color(0xFFFFBF00).copy(alpha = 0.8f * (1f - expandFactor)),
+                                Color(0xFFB04CFF).copy(alpha = 0.5f * (1f - expandFactor)),
+                                Color.Transparent
+                            ),
+                            center = center,
+                            radius = maxRadius * (0.3f + expandFactor * 1.2f)
+                        ),
+                        radius = maxRadius * (0.3f + expandFactor * 1.2f),
+                        center = center
+                    )
+
+                    drawCircle(
+                        color = Color(0xFF00D9FF).copy(alpha = 1f - expandFactor),
+                        radius = maxRadius * expandFactor,
+                        center = center,
+                        style = Stroke(width = 4.dp.toPx() * (1f - expandFactor))
+                    )
+
+                    val starRandom = Random(42)
+                    for (s in 0..24) {
+                        val angle = starRandom.nextFloat() * 2f * Math.PI.toFloat()
+                        val dist = maxRadius * expandFactor * (0.3f + starRandom.nextFloat() * 0.7f)
+                        val starColor = if (s % 2 == 0) Color(0xFF00D9FF) else Color(0xFFFFBF00)
+                        drawCircle(
+                            color = starColor.copy(alpha = expandFactor),
+                            radius = (2 + starRandom.nextFloat() * 3).dp.toPx(),
+                            center = Offset(center.x + cos(angle) * dist, center.y + sin(angle) * dist)
+                        )
+                    }
+                }
+
+                if (pulse > 0f) {
+                    drawCircle(
+                        color = Color(0xFFFFBF00).copy(alpha = pulse * 0.8f),
+                        radius = maxRadius * (0.4f + (1f - pulse) * 0.6f),
+                        center = center,
+                        style = Stroke(width = 3.dp.toPx() * pulse)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 3. CAPTURED SEQUENCE IN ACTUAL ORDER
+        Text(
+            text = "CAPTURED SEQUENCE",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Gray,
+            letterSpacing = 2.sp
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (sequence.isEmpty()) {
+            Text(
+                text = "No atoms captured during this hunt.",
+                fontSize = 13.sp,
+                color = Color.White.copy(alpha = 0.6f)
+            )
+        } else {
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp)
+            ) {
+                itemsIndexed(sequence) { index, elem ->
+                    val isPlayingThis = playingIndex == index
+
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = if (isPlayingThis) elem.color.copy(alpha = 0.35f) else Color(0xFF0D1329),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .border(
+                                width = if (isPlayingThis) 2.dp else 1.dp,
+                                color = if (isPlayingThis) Color(0xFFFFBF00) else elem.color.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = elem.symbol,
+                                color = if (isPlayingThis) Color.White else elem.color,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${elem.frequency.toInt()}Hz",
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 4. ATOM VAULT BREAKDOWN
+        Text(
+            text = "ATOM VAULT",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Gray,
+            letterSpacing = 2.sp
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            Element.values().forEach { el ->
+                val count = stats[el] ?: 0
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = el.symbol,
+                        color = el.color,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "×$count",
+                        color = Color.White,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // 5. BUTTON CONTROLS
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
+        ) {
+            Button(
+                onClick = { engine.playResultMelody() },
+                enabled = sequence.isNotEmpty(),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(if (isMelodyPlaying) "PLAYING..." else "PLAY MELODY", fontSize = 12.sp)
+            }
+
+            Button(
+                onClick = { engine.stopResultMelody() },
+                enabled = isMelodyPlaying,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("STOP", fontSize = 12.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+        ) {
+            Button(
+                onClick = {
+                    animTrigger++
+                    engine.replayResultAnimationAndMelody()
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("REPLAY", fontSize = 11.sp)
+            }
+
+            Button(
+                onClick = {
+                    engine.stopResultMelody()
+                    engine.startGame()
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("NEW HUNT", fontSize = 11.sp)
+            }
+
+            Button(
+                onClick = {
+                    engine.stopResultMelody()
+                    engine.resetToHome()
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("HOME", fontSize = 11.sp)
+            }
         }
     }
 }
