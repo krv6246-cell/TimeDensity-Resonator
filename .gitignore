@@ -9,6 +9,11 @@
 /.idea/assetWizardSettings.xml
 .DS_Store
 /build
+/web/node_modules
+/web/dist
+/web/.vite
+/web/.env
+/web/.env.*
 /captures
 .externalNativeBuild
 .cxx

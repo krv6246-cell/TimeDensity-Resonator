@@ -3,6 +3,13 @@
 
 ATOM HUNTER is an experimental game mode built on top of the **REZONATOR** technical core. It transforms frequency-tuning mechanics into a challenging visual and auditory hunt for atomic elements.
 
+## Project layout
+
+- **Android app (repository root):** Jetpack Compose game in `app/` and the reusable Kotlin resonance engine in `core/`.
+- **Browser game (`web/`):** standalone React + Vite implementation. It does not use the Android Gradle build or any hosted app-builder service.
+
+Keep platform-specific source and dependencies in their respective folders. The Android and browser versions share the game concept and element seed set, but have separate platform implementations.
+
 ## Architecture
 
 - **REZONATOR**: The underlying technical core and engine processing frequency tolerance and matching mathematics. It relies on the external `:core` module (`ResonanceEngine`).
@@ -36,11 +43,25 @@ Once captured, the atom is pulled into the central **ATOM VAULT** (a pulsing cos
 | Iron | Fe | 110 |
 
 ## Current Limitations & Future Plans
-- The ATOM VAULT currently only tracks the element counts. Future updates will introduce mechanics to forge captured matter into a new universe and generate a musical composition out of the caught frequencies.
+- The Android result screen includes a capture-sequence melody. Scoring and a cross-session personal best are not yet shared between the Android and browser versions.
 - Only the 6 baseline elements are implemented.
 
 ## Running the Project
+
+### Android
+
 ```
 ./gradlew app:assembleDebug
 ./gradlew core:test
 ```
+
+### Browser game
+
+Run these commands from `web/`:
+
+```
+npm install
+npm run dev
+```
+
+Create a production build with `npm run build` and run the browser-game checks with `npm run lint` and `npm run typecheck`.

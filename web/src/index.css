@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    --background: 220 26% 6%;
+    --foreground: 210 28% 94%;
+    --card: 220 23% 10%;
+    --card-foreground: 210 28% 94%;
+    --popover: 220 23% 10%;
+    --popover-foreground: 210 28% 94%;
+    --primary: 78 98% 63%;
+    --primary-foreground: 220 26% 6%;
+    --secondary: 215 22% 18%;
+    --secondary-foreground: 210 28% 94%;
+    --muted: 215 16% 17%;
+    --muted-foreground: 215 12% 62%;
+    --accent: 184 91% 58%;
+    --accent-foreground: 220 26% 6%;
+    --destructive: 0 76% 56%;
+    --destructive-foreground: 210 28% 94%;
+    --border: 215 22% 22%;
+    --input: 215 22% 22%;
+    --ring: 184 91% 58%;
+    --radius: 0.75rem;
+    --font-heading: ui-sans-serif, system-ui, sans-serif;
+    --font-body: ui-sans-serif, system-ui, sans-serif;
+    --font-display: ui-sans-serif, system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+
+  * { @apply border-border; }
+  body { @apply m-0 bg-background text-foreground font-body; }
+  button { @apply cursor-pointer; }
+}
