@@ -81,11 +81,14 @@ class GameEngine : ViewModel() {
 
     private var gameJob: Job? = null
     private var melodyJob: Job? = null
+    private var collapseJob: Job? = null
 
     private var lastActiveAtomId: Int? = null
 
     fun startGame(newSeed: Long? = null) {
         gameJob?.cancel()
+        collapseJob?.cancel()
+        collapseJob = null
         stopResultMelody()
 
         val seedToUse = newSeed ?: System.currentTimeMillis()
@@ -317,13 +320,15 @@ class GameEngine : ViewModel() {
     }
 
     private fun startCollapse() {
-        viewModelScope.launch {
+        collapseJob?.cancel()
+        collapseJob = viewModelScope.launch {
             audioEngine.setTargetFrequency(0f)
             audioEngine.setCarrierFrequency(0f)
-            audioEngine.setCarrierFrequency(0f)
             delay(2000)
-            audioEngine.stop()
-            _phase.value = GamePhase.RESULT
+            if (_phase.value == GamePhase.COLLAPSE) {
+                audioEngine.stop()
+                _phase.value = GamePhase.RESULT
+            }
         }
     }
 
@@ -361,6 +366,8 @@ class GameEngine : ViewModel() {
 
     fun resetToHome() {
         gameJob?.cancel()
+        collapseJob?.cancel()
+        collapseJob = null
         stopResultMelody()
         _phase.value = GamePhase.START
         audioEngine.stop()
@@ -386,6 +393,7 @@ class GameEngine : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         gameJob?.cancel()
+        collapseJob?.cancel()
         stopResultMelody()
         audioEngine.stop()
     }
