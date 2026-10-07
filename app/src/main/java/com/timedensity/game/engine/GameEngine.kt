@@ -2,10 +2,15 @@ package com.timedensity.game.engine
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.os.SystemClock
 import com.timedensity.game.audio.AudioEngine
 import com.timedensity.game.model.Atom
 import com.timedensity.game.model.Element
 import com.timedensity.game.model.GamePhase
+import com.timedensity.game.model.LiveTargetSelection
+import com.timedensity.game.music.CaptureEvent
+import com.timedensity.game.music.CaptureSession
+import com.timedensity.game.music.TrackComposer
 import com.timedensity.resonator.core.ResonancePhase
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -31,6 +36,9 @@ class GameEngine : ViewModel() {
     private val _carrierFreq = MutableStateFlow(400f)
     val carrierFreq: StateFlow<Float> = _carrierFreq.asStateFlow()
 
+    private val _musicVolume = MutableStateFlow(0.4f)
+    val musicVolume: StateFlow<Float> = _musicVolume.asStateFlow()
+
     private val _targetFreq = MutableStateFlow(0f)
     val targetFreq: StateFlow<Float> = _targetFreq.asStateFlow()
 
@@ -52,6 +60,12 @@ class GameEngine : ViewModel() {
     private val _capturedSequence = MutableStateFlow<List<Element>>(emptyList())
     val capturedSequence: StateFlow<List<Element>> = _capturedSequence.asStateFlow()
 
+    private val _captureSession = MutableStateFlow(CaptureSession(42L, emptyList()))
+    val captureSession: StateFlow<CaptureSession> = _captureSession.asStateFlow()
+
+    private val _targetAtomId = MutableStateFlow<Int?>(null)
+    val targetAtomId: StateFlow<Int?> = _targetAtomId.asStateFlow()
+
     private val _playingNoteIndex = MutableStateFlow(-1)
     val playingNoteIndex: StateFlow<Int> = _playingNoteIndex.asStateFlow()
 
@@ -63,6 +77,7 @@ class GameEngine : ViewModel() {
 
     private var atomIdCounter = 0
     private var random = Random(42)
+    private var sessionStartedAt = 0L
 
     private var gameJob: Job? = null
     private var melodyJob: Job? = null
@@ -79,13 +94,17 @@ class GameEngine : ViewModel() {
         _atoms.value = emptyList()
         _stabilizedCount.value = emptyMap()
         _capturedSequence.value = emptyList()
+        _captureSession.value = CaptureSession(seedToUse, emptyList())
+        _targetAtomId.value = null
         _blackHoleFlash.value = 0f
         atomIdCounter = 0
         random = Random(seedToUse)
+        sessionStartedAt = SystemClock.elapsedRealtime()
         lastActiveAtomId = null
 
         adapter.reset()
         audioEngine.start()
+        audioEngine.setCarrierFrequency(_carrierFreq.value)
         audioEngine.clearTones()
 
         gameJob = viewModelScope.launch {
@@ -101,7 +120,24 @@ class GameEngine : ViewModel() {
         }
     }
 
-    private fun startCapture(activeAtom: Atom) {
+    fun setMusicVolume(volume: Float) {
+        if (volume.isFinite()) {
+            _musicVolume.value = volume.coerceIn(0f, 1f)
+            audioEngine.setVolume(_musicVolume.value)
+        }
+    }
+
+    fun selectAtom(atomId: Int) {
+        if (_phase.value != GamePhase.PLAYING) return
+        if (_atoms.value.none { it.id == atomId && !it.isCapturing && !it.absorbed }) return
+        if (_targetAtomId.value != atomId) {
+            _targetAtomId.value = atomId
+            adapter.reset()
+            lastActiveAtomId = null
+        }
+    }
+
+    private fun startCapture(activeAtom: Atom, snapshotPhase: ResonancePhase, precision: Float, heldForMs: Long) {
         val updatedAtoms = _atoms.value.toMutableList()
         val index = updatedAtoms.indexOfFirst { it.id == activeAtom.id }
         if (index != -1) {
@@ -123,6 +159,16 @@ class GameEngine : ViewModel() {
             list.add(activeAtom.element)
             _capturedSequence.value = list
 
+            val events = _captureSession.value.events + CaptureEvent(
+                elementSymbol = activeAtom.element.symbol,
+                frequencyHz = activeAtom.element.frequency,
+                capturedAtMs = (SystemClock.elapsedRealtime() - sessionStartedAt).coerceAtLeast(0L),
+                precision = precision,
+                heldForMs = heldForMs,
+                resonancePhase = snapshotPhase.name
+            )
+            _captureSession.value = _captureSession.value.copy(events = events)
+
             // Play element tone once
             audioEngine.playElementTone(activeAtom.element)
         }
@@ -132,7 +178,7 @@ class GameEngine : ViewModel() {
 
     private suspend fun gameLoop() {
         var lastTime = System.currentTimeMillis()
-        var spawnTimer = 0f
+        var spawnTimer = SPAWN_INTERVAL_SECONDS - 1f
 
         while (_phase.value == GamePhase.PLAYING) {
             val currentTime = System.currentTimeMillis()
@@ -144,15 +190,11 @@ class GameEngine : ViewModel() {
                 _blackHoleFlash.value = (_blackHoleFlash.value - dt * 2f).coerceAtLeast(0f)
             }
 
-            // Spawn Atoms: spawn a new one if no active (non-capturing) atoms exist
-            if (_atoms.value.count { !it.isCapturing && !it.absorbed } == 0) {
-                spawnTimer += dt
-                if (spawnTimer > 1f) {
-                    spawnTimer = 0f
-                    spawnAtom()
-                }
-            } else {
+            // Keep a small field of live targets; captures continue to use one selected resonance target.
+            spawnTimer += dt
+            if (_atoms.value.count { !it.isCapturing && !it.absorbed } < MAX_LIVE_ATOMS && spawnTimer >= SPAWN_INTERVAL_SECONDS) {
                 spawnTimer = 0f
+                spawnAtom()
             }
 
             // Move & Capture atoms
@@ -200,7 +242,10 @@ class GameEngine : ViewModel() {
             _atoms.value = currentAtoms
 
             // ===== RESONANCE CORE UPDATE =====
-            val activeAtom = currentAtoms.firstOrNull { !it.isCapturing && !it.absorbed }
+            val liveAtoms = currentAtoms.filter { !it.isCapturing && !it.absorbed }
+            val selectedId = LiveTargetSelection.choose(_targetAtomId.value, liveAtoms.map { it.id })
+            val activeAtom = liveAtoms.firstOrNull { it.id == selectedId }
+            if (_targetAtomId.value != activeAtom?.id) _targetAtomId.value = activeAtom?.id
 
             val activeAtomChanged = activeAtom?.id != lastActiveAtomId
             if (activeAtomChanged) {
@@ -220,8 +265,11 @@ class GameEngine : ViewModel() {
                 _holdProgress.value = (snapshot.heldForMs / 800f).coerceIn(0f, 1f)
 
                 if (snapshot.phase == ResonancePhase.STABLE) {
-                    adapter.transform()
-                    startCapture(activeAtom)
+                    val transformed = adapter.transform()
+                    if (transformed.phase == ResonancePhase.TRANSFORMED) {
+                        _resonancePhase.value = transformed.phase
+                        startCapture(activeAtom, transformed.phase, transformed.precision.toFloat(), transformed.heldForMs)
+                    }
                 }
             } else {
                 _targetFreq.value = 0f
@@ -271,25 +319,29 @@ class GameEngine : ViewModel() {
     private fun startCollapse() {
         viewModelScope.launch {
             audioEngine.setTargetFrequency(0f)
+            audioEngine.setCarrierFrequency(0f)
+            audioEngine.setCarrierFrequency(0f)
             delay(2000)
+            audioEngine.stop()
             _phase.value = GamePhase.RESULT
         }
     }
 
     fun playResultMelody() {
-        val sequence = _capturedSequence.value
-        if (sequence.isEmpty()) return
+        val notes = TrackComposer.compose(_captureSession.value)
+        if (notes.isEmpty()) return
 
         stopResultMelody()
         audioEngine.start()
 
         melodyJob = viewModelScope.launch {
             _isMelodyPlaying.value = true
-            audioEngine.playMelodySequence(sequence) { index, _ ->
+            audioEngine.playComposition(notes) { index, _ ->
                 _playingNoteIndex.value = index
             }
             _playingNoteIndex.value = -1
             _isMelodyPlaying.value = false
+            audioEngine.stop()
         }
     }
 
@@ -297,6 +349,7 @@ class GameEngine : ViewModel() {
         melodyJob?.cancel()
         melodyJob = null
         audioEngine.stopMelody()
+        if (_phase.value == GamePhase.RESULT) audioEngine.stop()
         _playingNoteIndex.value = -1
         _isMelodyPlaying.value = false
     }
@@ -313,6 +366,21 @@ class GameEngine : ViewModel() {
         audioEngine.stop()
         adapter.reset()
         lastActiveAtomId = null
+        _targetAtomId.value = null
+    }
+
+    fun resultSessionJson(): String = _captureSession.value.toJson()
+
+    fun stopAudioForBackground() {
+        audioEngine.stop()
+    }
+
+    fun resumeAudioForForeground() {
+        if (_phase.value == GamePhase.PLAYING) {
+            audioEngine.start()
+            audioEngine.setCarrierFrequency(_carrierFreq.value)
+            audioEngine.setTargetFrequency(_targetFreq.value)
+        }
     }
 
     override fun onCleared() {
@@ -320,5 +388,10 @@ class GameEngine : ViewModel() {
         gameJob?.cancel()
         stopResultMelody()
         audioEngine.stop()
+    }
+
+    private companion object {
+        const val MAX_LIVE_ATOMS = 4
+        const val SPAWN_INTERVAL_SECONDS = 2.4f
     }
 }

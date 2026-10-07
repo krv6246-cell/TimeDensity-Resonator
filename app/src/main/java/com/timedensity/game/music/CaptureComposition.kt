@@ -46,7 +46,7 @@ data class TrackNote(
 
 object TrackComposer {
     const val TEMPO_BPM = 120
-    const val GRID_MS = 250L
+    const val GRID_MS = 60_000L / TEMPO_BPM / 2
 
     fun compose(session: CaptureSession): List<TrackNote> {
         var previousOnset = -GRID_MS
@@ -88,7 +88,8 @@ object UniverseLayout {
                 val baseRadius = 0.28f + 0.60f * sqrt((index + 1f) / (session.events.size + 1f))
                 val seed = session.seed + index * 509L
                 val capturePhase = (event.capturedAtMs % 60_000L) / 60_000f
-                val atomAngle = index * GOLDEN_ANGLE + capturePhase * (2f * PI.toFloat())
+                val seedPhase = unitNoise(session.seed + index) * 0.32f
+                val atomAngle = index * GOLDEN_ANGLE + capturePhase * (2f * PI.toFloat()) + seedPhase
                 add(
                     GalaxyStar(
                         eventIndex = index,

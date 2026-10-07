@@ -3,12 +3,12 @@ package com.timedensity.game.model
 import androidx.compose.ui.graphics.Color
 
 enum class Element(val symbol: String, val frequency: Float, val color: Color) {
-    H("H", 659f, Color(0xFF00FFFF)),
-    He("He", 392f, Color(0xFF8A2BE2)),
-    C("C", 293f, Color(0xFFFFBF00)),
-    N("N", 261f, Color(0xFF00FF00)),
-    O("O", 220f, Color(0xFFFF7F50)),
-    Fe("Fe", 110f, Color(0xFFB87333))
+    H("H", 659f, Color(0xFF43E7E1)),
+    He("He", 392f, Color(0xFFA77BFF)),
+    C("C", 293f, Color(0xFFB9C8D3)),
+    N("N", 261f, Color(0xFF13B8B1)),
+    O("O", 220f, Color(0xFF6AC9D3)),
+    Fe("Fe", 110f, Color(0xFF91A1AE))
 }
 
 data class Atom(

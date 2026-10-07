@@ -4,6 +4,7 @@ import com.timedensity.game.music.CaptureEvent
 import com.timedensity.game.music.CaptureSession
 import com.timedensity.game.music.TrackComposer
 import com.timedensity.game.music.UniverseLayout
+import com.timedensity.game.model.LiveTargetSelection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -37,6 +38,7 @@ class CaptureCompositionTest {
         assertEquals(30, first.size)
         assertEquals(3, first.count { it.isAtom })
         assertTrue(first.all { it.x in 0f..1f && it.y in 0f..1f })
+        assertTrue(first != UniverseLayout.generate(session.copy(seed = 28L), maxParticles = 30))
     }
 
     @Test
@@ -56,5 +58,13 @@ class CaptureCompositionTest {
         assertTrue(json.contains("\"frequencyHz\":110.0"))
         assertTrue(json.contains("\"capturedAtMs\":1000"))
         assertTrue(json.contains("\"phase\":\"TRANSFORMED\""))
+    }
+
+    @Test
+    fun targetSelectionKeepsPreferredLiveTargetAndFallsBackFairly() {
+        assertEquals(8, LiveTargetSelection.choose(8, listOf(4, 8, 12)))
+        assertEquals(4, LiveTargetSelection.choose(8, listOf(4, 12)))
+        assertEquals(4, LiveTargetSelection.choose(null, listOf(4, 12)))
+        assertEquals(null, LiveTargetSelection.choose(8, emptyList()))
     }
 }

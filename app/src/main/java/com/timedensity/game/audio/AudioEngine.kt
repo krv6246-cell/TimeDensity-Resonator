@@ -4,6 +4,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import com.timedensity.game.model.Element
+import com.timedensity.game.music.TrackNote
 import kotlinx.coroutines.delay
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.sin
@@ -11,7 +12,7 @@ import kotlin.math.tanh
 
 class AudioEngine {
     private val sampleRate = 44100
-    private var isPlaying = false
+    @Volatile private var isPlaying = false
     private var audioTrack: AudioTrack? = null
     private var thread: Thread? = null
 
@@ -20,29 +21,50 @@ class AudioEngine {
     @Volatile private var volume = 0.4f
     @Volatile private var isMelodyPlaying = false
 
+    private enum class Waveform { SINE, SAW, TRIANGLE, KICK, NOISE }
+
     private class ToneVoice(
         val frequency: Float,
         val totalSamples: Int,
         var currentSample: Int = 0,
-        val amplitude: Float = 0.12f
+        val amplitude: Float = 0.12f,
+        private val waveform: Waveform = Waveform.SINE
     ) {
+        private var phase = 0.0
+        private var noiseState = (frequency.toLong() * 31L + totalSamples).toInt()
+
         fun getNextSample(sampleRate: Int): Float {
             if (currentSample >= totalSamples) return 0f
 
-            // Envelope: 15ms attack, smooth parabolic decay
             val attackSamples = (sampleRate * 0.015f).toInt().coerceAtLeast(1)
             val envelope = when {
                 currentSample < attackSamples -> currentSample.toFloat() / attackSamples
                 else -> {
-                    val decayProgress = (currentSample - attackSamples).toFloat() / (totalSamples - attackSamples)
+                    val decayProgress = (currentSample - attackSamples).toFloat() /
+                        (totalSamples - attackSamples).coerceAtLeast(1)
                     val remaining = (1f - decayProgress).coerceIn(0f, 1f)
                     remaining * remaining
                 }
             }
 
-            val phase = 2.0 * Math.PI * frequency * currentSample / sampleRate
+            val progress = currentSample.toFloat() / totalSamples
+            val currentFrequency = if (waveform == Waveform.KICK) {
+                frequency * (1f - 0.82f * progress)
+            } else frequency
+            phase += 2.0 * Math.PI * currentFrequency / sampleRate
+            if (phase >= 2.0 * Math.PI) phase -= 2.0 * Math.PI
+            val normalizedPhase = phase / (2.0 * Math.PI)
+            val oscillator = when (waveform) {
+                Waveform.SINE, Waveform.KICK -> sin(phase)
+                Waveform.SAW -> 2.0 * normalizedPhase - 1.0
+                Waveform.TRIANGLE -> 1.0 - 4.0 * kotlin.math.abs(normalizedPhase - 0.5)
+                Waveform.NOISE -> {
+                    noiseState = noiseState * 1_664_525 + 1_013_904_223
+                    (noiseState.toDouble() / Int.MAX_VALUE).coerceIn(-1.0, 1.0)
+                }
+            }
             currentSample++
-            return (sin(phase) * envelope * amplitude).toFloat()
+            return (oscillator * envelope * amplitude).toFloat()
         }
 
         fun isFinished(): Boolean = currentSample >= totalSamples
@@ -61,8 +83,12 @@ class AudioEngine {
             AudioFormat.CHANNEL_OUT_MONO,
             AudioFormat.ENCODING_PCM_16BIT
         )
+        if (minSize <= 0) {
+            isPlaying = false
+            return
+        }
 
-        audioTrack = AudioTrack.Builder()
+        val track = runCatching { AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_GAME)
@@ -79,11 +105,23 @@ class AudioEngine {
             .setBufferSizeInBytes(minSize)
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
+        }.getOrNull()
+        if (track == null || track.state != AudioTrack.STATE_INITIALIZED) {
+            track?.release()
+            isPlaying = false
+            return
+        }
 
-        audioTrack?.play()
+        audioTrack = track
+        runCatching { track.play() }.onFailure {
+            isPlaying = false
+            track.release()
+            audioTrack = null
+            return
+        }
 
         thread = Thread {
-            val buffer = ShortArray(minSize)
+            val buffer = ShortArray((minSize / Short.SIZE_BYTES).coerceAtLeast(1))
             var angleCarrier = 0.0
             var angleTarget = 0.0
             var angleDrone = 0.0
@@ -157,6 +195,10 @@ class AudioEngine {
         }
     }
 
+    fun setVolume(level: Float) {
+        if (level.isFinite()) volume = level.coerceIn(0f, 1f)
+    }
+
     fun playElementTone(element: Element) {
         playToneVoice(element.frequency, durationMs = 800L, amplitude = 0.15f)
     }
@@ -167,25 +209,78 @@ class AudioEngine {
 
     private fun playToneVoice(frequency: Float, durationMs: Long, amplitude: Float) {
         val totalSamples = ((durationMs / 1000f) * sampleRate).toInt().coerceAtLeast(100)
-        // Limit active voices to 5 to prevent audio overload
-        if (activeVoices.size >= 5) {
+        if (activeVoices.size >= 18) {
             activeVoices.removeAt(0)
         }
         activeVoices.add(ToneVoice(frequency, totalSamples, 0, amplitude))
     }
 
-    suspend fun playMelodySequence(
-        sequence: List<Element>,
-        onNotePlayed: (index: Int, element: Element) -> Unit
+    private fun playSynthVoice(
+        frequency: Float,
+        durationMs: Long,
+        amplitude: Float,
+        waveform: Waveform
     ) {
-        if (sequence.isEmpty()) return
+        val safeFrequency = frequency.coerceIn(35f, 12_000f)
+        val totalSamples = ((durationMs / 1000f) * sampleRate).toInt().coerceAtLeast(100)
+        if (activeVoices.size >= 18) activeVoices.removeAt(0)
+        activeVoices.add(ToneVoice(safeFrequency, totalSamples, 0, amplitude, waveform))
+    }
+
+    private fun playIndustrialKick() {
+        playSynthVoice(128f, 220L, 0.24f, Waveform.KICK)
+        playSynthVoice(64f, 260L, 0.11f, Waveform.SINE)
+    }
+
+    private fun playIndustrialHit() {
+        playSynthVoice(190f, 110L, 0.08f, Waveform.TRIANGLE)
+        playSynthVoice(5_200f, 75L, 0.045f, Waveform.NOISE)
+    }
+
+    private fun playHiHat() {
+        playSynthVoice(7_800f, 45L, 0.035f, Waveform.NOISE)
+    }
+
+    private fun playCompositionLead(note: TrackNote) {
+        val energy = 0.55f + note.precision * 0.45f
+        playSynthVoice(note.fundamentalHz, note.durationMs, 0.15f * energy, Waveform.SAW)
+        playSynthVoice(note.bassHz, note.durationMs + 80L, 0.10f * energy, Waveform.SINE)
+        playSynthVoice(note.fundamentalHz * 2f, note.durationMs / 2L, 0.035f * energy, Waveform.SINE)
+    }
+
+    suspend fun playComposition(
+        notes: List<TrackNote>,
+        onNotePlayed: (index: Int, elementSymbol: String) -> Unit
+    ) {
+        if (notes.isEmpty()) return
         isMelodyPlaying = true
-        for (i in sequence.indices) {
-            if (!isMelodyPlaying || !isPlaying) break
-            val element = sequence[i]
-            onNotePlayed(i, element)
-            playMelodyTone(element.frequency, durationMs = 380L)
-            delay(420L)
+        var noteIndex = 0
+        var nextBeat = 0L
+        var nextHat = 0L
+        val startedAt = System.nanoTime() / 1_000_000L
+        val finalOnset = notes.last().onsetMs + notes.last().durationMs + 100L
+        while (isMelodyPlaying && isPlaying) {
+            val elapsed = (System.nanoTime() / 1_000_000L - startedAt).coerceAtLeast(0L)
+            if (elapsed > finalOnset) break
+
+            while (noteIndex < notes.size && notes[noteIndex].onsetMs <= elapsed) {
+                val note = notes[noteIndex]
+                onNotePlayed(note.eventIndex, note.elementSymbol)
+                playCompositionLead(note)
+                noteIndex++
+            }
+
+            val beat = elapsed / 500L
+            if (beat >= nextBeat) {
+                if (beat % 4L == 0L || beat % 4L == 2L) playIndustrialKick() else playIndustrialHit()
+                nextBeat = beat + 1L
+            }
+            val hat = elapsed / 250L
+            if (hat >= nextHat) {
+                playHiHat()
+                nextHat = hat + 1L
+            }
+            delay(20L)
         }
         isMelodyPlaying = false
     }

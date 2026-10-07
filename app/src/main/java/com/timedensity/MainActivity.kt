@@ -25,9 +25,19 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    RezonatorApp(engine = gameEngine)
+                    RezonatorApp(engine = gameEngine, onExit = { finish() })
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        gameEngine.resumeAudioForForeground()
+    }
+
+    override fun onStop() {
+        gameEngine.stopAudioForBackground()
+        super.onStop()
     }
 }

@@ -24,13 +24,17 @@ The player tunes a Carrier frequency using the TUNE slider to hunt for elements.
 2. **STABLE**: The player holds the frequency within the exit tolerance zone (±50 Hz) for a specific duration (800 ms). Hysteresis and grace periods prevent micro-movements from failing the capture instantly.
 3. **TRANSFORMED**: The atom is successfully captured.
 
-Once captured, the atom is pulled into the central **ATOM VAULT** (a pulsing cosmic black hole) through a spiral animation accompanied by a golden flash, and its count is added to the player's collection.
+Up to four atoms remain visible at once. The player chooses one target from the field before tuning; each target still follows the `MATCHED → STABLE → TRANSFORMED` resonance lifecycle. Captured atoms spiral into the central **ATOM VAULT**, and their count is added to the collection.
 
 ## Features
 
-- **TUNE Slider**: A precise gradient slider with magnetic snap feedback (`±12 Hz`) assisting the player in locking onto frequencies.
-- **WaveformDisplay**: A live visual oscilloscope plotting the `Target` (Neon Violet) and `Carrier` (Electric Cyan) waves, reacting with a golden glow when resonance is stable.
-- **ATOM VAULT**: Visual collection tracking the player's catch of six distinct elements.
+- **TUNE Slider**: A keyboard/screen-reader-accessible frequency control with magnetic snap feedback (`±12 Hz`).
+- **Gravity field**: A low-cost animated lensing grid reacts to live atoms and stable resonance, and becomes static when Android animations are disabled.
+- **WaveformDisplay**: A live oscilloscope plots the target and carrier waves in the cyan/violet palette.
+- **ATOM VAULT**: Tracks captures of six distinct elements while keeping their original frequencies.
+- **Generated composition**: Each capture stores its element, exact frequency, order, elapsed time, precision, hold duration, and transformed phase. A deterministic 120 BPM arrangement quantizes the capture rhythm, uses each real element frequency as its lead with an octave bass, and layers procedural industrial percussion without external samples.
+- **Finale galaxy**: A seeded layout built from the same capture events highlights the corresponding atom during playback and supports replay/reduced-motion behavior.
+- **Save and navigation**: Save the session pattern as JSON through Android's document picker; playback has stop and volume controls, and Home/Exit actions are available with back-button handling.
 
 ### Target Elements
 | Element | Symbol | Frequency (Hz) |
@@ -43,7 +47,7 @@ Once captured, the atom is pulled into the central **ATOM VAULT** (a pulsing cos
 | Iron | Fe | 110 |
 
 ## Current Limitations & Future Plans
-- The Android result screen includes a capture-sequence melody. Scoring and a cross-session personal best are not yet shared between the Android and browser versions.
+- Android and browser gameplay/session formats are not yet shared; the event, composition, and seeded-layout models are platform-neutral Kotlin to support a future port.
 - Only the 6 baseline elements are implemented.
 
 ## Running the Project
@@ -51,8 +55,8 @@ Once captured, the atom is pulled into the central **ATOM VAULT** (a pulsing cos
 ### Android
 
 ```
-./gradlew app:assembleDebug
-./gradlew core:test
+bash gradlew app:assembleDebug
+bash gradlew core:test
 ```
 
 ### Browser game

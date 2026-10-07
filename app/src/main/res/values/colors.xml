@@ -7,4 +7,6 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="hunter_background">#FF050A12</color>
+    <color name="hunter_cyan">#FF43E7E1</color>
 </resources>
