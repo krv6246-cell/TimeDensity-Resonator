@@ -26,7 +26,24 @@ class CaptureCompositionTest {
         assertEquals(listOf(110f, 261f, 659f), notes.map { it.fundamentalHz })
         assertEquals(listOf(0L, 500L, 1_000L), notes.map { it.onsetMs })
         assertEquals(listOf(55f, 130.5f, 329.5f), notes.map { it.bassHz })
+        assertEquals(listOf(440L, 440L, 440L), notes.map { it.durationMs })
         assertTrue(notes.zipWithNext().all { (first, second) -> second.onsetMs > first.onsetMs })
+    }
+
+    @Test
+    fun compositionArticulationReflectsCaptureHoldTimeWithinMusicalBounds() {
+        val sessionWithDifferentHolds = session.copy(
+            events = listOf(
+                session.events[0].copy(heldForMs = 300L),
+                session.events[1].copy(heldForMs = 1_200L),
+                session.events[2].copy(heldForMs = 0L)
+            )
+        )
+
+        assertEquals(
+            listOf(220L, 560L, 220L),
+            TrackComposer.compose(sessionWithDifferentHolds).map { it.durationMs }
+        )
     }
 
     @Test

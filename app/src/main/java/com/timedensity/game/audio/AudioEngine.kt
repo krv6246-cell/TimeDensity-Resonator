@@ -243,7 +243,7 @@ class AudioEngine {
 
     private fun playCompositionLead(note: TrackNote) {
         val energy = 0.55f + note.precision * 0.45f
-        playSynthVoice(note.fundamentalHz, note.durationMs, 0.15f * energy, Waveform.SAW)
+        playSynthVoice(note.fundamentalHz, note.durationMs, 0.15f * energy, Waveform.TRIANGLE)
         playSynthVoice(note.bassHz, note.durationMs + 80L, 0.10f * energy, Waveform.SINE)
         playSynthVoice(note.fundamentalHz * 2f, note.durationMs / 2L, 0.035f * energy, Waveform.SINE)
     }

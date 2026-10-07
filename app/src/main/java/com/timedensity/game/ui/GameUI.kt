@@ -15,13 +15,10 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -46,7 +43,7 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -103,22 +100,26 @@ fun RezonatorApp(engine: GameEngine, onExit: () -> Unit) {
             .background(HunterBackground)
     ) {
         when (phase) {
-            GamePhase.START -> StartScreen(
-                onStart = { engine.startGame() },
-                onExit = { showExitConfirmation = true }
-            )
+            GamePhase.START -> {
+                val session by engine.captureSession.collectAsState()
+                StartScreen(
+                    canSaveSession = session.events.isNotEmpty(),
+                    exportStatus = exportStatus,
+                    onStart = { engine.startGame() },
+                    onSaveSession = {
+                        pendingExport = engine.resultSessionJson()
+                        exportStatus = "Choose where to save your session pattern"
+                        exportLauncher.launch("atom-hunter-${System.currentTimeMillis()}.json")
+                    },
+                    onExit = { showExitConfirmation = true }
+                )
+            }
             GamePhase.PLAYING, GamePhase.COLLAPSE -> GameScreen(
                 engine = engine,
                 onExit = { showExitConfirmation = true }
             )
             GamePhase.RESULT -> ResultScreen(
                 engine = engine,
-                exportStatus = exportStatus,
-                onSavePattern = {
-                    pendingExport = engine.resultSessionJson()
-                    exportStatus = "Choose where to save your session pattern"
-                    exportLauncher.launch("atom-hunter-${System.currentTimeMillis()}.json")
-                },
                 onExit = { showExitConfirmation = true }
             )
         }
@@ -147,7 +148,13 @@ fun RezonatorApp(engine: GameEngine, onExit: () -> Unit) {
 }
 
 @Composable
-fun StartScreen(onStart: () -> Unit, onExit: () -> Unit) {
+fun StartScreen(
+    canSaveSession: Boolean,
+    exportStatus: String,
+    onStart: () -> Unit,
+    onSaveSession: () -> Unit,
+    onExit: () -> Unit
+) {
     val compactLayout = LocalConfiguration.current.screenHeightDp < 700
     val reducedMotion = remember { reducedMotionEnabled() }
     val (scale, rotate) = if (reducedMotion) {
@@ -176,67 +183,77 @@ fun StartScreen(onStart: () -> Unit, onExit: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // 1 & 2. Logo and Subtitle
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = "∞", fontSize = 32.sp, color = HunterCyan, fontWeight = FontWeight.Light)
+            Text(text = "∞", fontSize = 34.sp, color = HunterCyan, fontWeight = FontWeight.Light)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(text = "TIME DENSITY", fontSize = 12.sp, color = Color.Gray, letterSpacing = 4.sp)
+            Text(text = "TIME  /  DENSITY", fontSize = 11.sp, color = HunterMetal, letterSpacing = 3.sp)
         }
         
         Spacer(modifier = Modifier.weight(1f))
         
-        // 3, 4 & 5. Main Title Area
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = "ATOM", 
-                color = HunterCyan,
-                style = AtomHunterWordmarkStyle.copy(
-                    fontSize = if (compactLayout) 46.sp else 56.sp,
-                    lineHeight = if (compactLayout) 50.sp else 60.sp
-                )
-            )
-            Text(
-                text = "HUNTER", 
-                color = HunterViolet,
-                style = TextStyle(
-                    fontFamily = AtomHunterWordmarkStyle.fontFamily,
-                    fontWeight = FontWeight.Medium,
-                    fontStyle = AtomHunterWordmarkStyle.fontStyle,
-                    fontSize = if (compactLayout) 46.sp else 56.sp,
-                    letterSpacing = AtomHunterWordmarkStyle.letterSpacing,
-                    lineHeight = if (compactLayout) 50.sp else 60.sp,
-                    shadow = Shadow(
-                        color = HunterViolet.copy(alpha = 0.55f),
-                        blurRadius = 16f
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(HunterCyan.copy(alpha = 0.1f), HunterViolet.copy(alpha = 0.12f), HunterBackground)
+                        )
                     )
-                )
-            )
-            Spacer(modifier = Modifier.height(24.dp))
+                    .border(1.dp, HunterCyan.copy(alpha = 0.28f), RoundedCornerShape(18.dp))
+                    .padding(horizontal = 24.dp, vertical = if (compactLayout) 14.dp else 20.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "ATOM",
+                        color = HunterCyan,
+                        style = AtomHunterWordmarkStyle.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Black,
+                            fontSize = if (compactLayout) 44.sp else 58.sp,
+                            letterSpacing = 5.sp,
+                            lineHeight = if (compactLayout) 48.sp else 62.sp,
+                            shadow = Shadow(HunterCyan.copy(alpha = 0.7f), blurRadius = 18f)
+                        )
+                    )
+                    Text(
+                        text = "HUNTER",
+                        color = HunterViolet,
+                        style = AtomHunterWordmarkStyle.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Black,
+                            fontSize = if (compactLayout) 30.sp else 38.sp,
+                            letterSpacing = 7.sp,
+                            lineHeight = if (compactLayout) 34.sp else 42.sp,
+                            shadow = Shadow(HunterViolet.copy(alpha = 0.65f), blurRadius = 16f)
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        "FREQUENCY  /  MATTER  /  TIME",
+                        color = HunterTurquoise,
+                        fontSize = 9.sp,
+                        letterSpacing = 2.sp
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(18.dp))
             Text(
-                text = "Powered by Time Density", 
-                fontSize = 14.sp, 
-                color = HunterViolet,
+                text = "Hunt the frequency. Capture the atom.",
+                fontSize = 14.sp,
+                color = Color(0xFFF2F5FF).copy(alpha = 0.82f),
                 fontWeight = FontWeight.Medium,
-                letterSpacing = 1.sp
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Hunt the frequency. Capture the atom.", 
-                fontSize = 14.sp, 
-                color = Color(0xFFF2F5FF).copy(alpha = 0.7f),
-                fontWeight = FontWeight.Light,
-                letterSpacing = 0.5.sp
+                letterSpacing = 0.7.sp
             )
         }
         
         Spacer(modifier = Modifier.weight(1.5f))
         
-        // 6. Black Hole Entry
-        Canvas(modifier = Modifier        .size(if (compactLayout) 128.dp else 160.dp)) {
+        Canvas(modifier = Modifier.size(if (compactLayout) 128.dp else 160.dp)) {
             val center = Offset(size.width / 2, size.height / 2)
             val radius = size.width / 2 * scale
             
-            // Outer Violet ring
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(Color.Transparent, HunterViolet.copy(alpha = 0.3f), Color.Transparent),
@@ -247,7 +264,6 @@ fun StartScreen(onStart: () -> Unit, onExit: () -> Unit) {
                 center = center
             )
             
-            // Middle Cyan ring
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(Color.Transparent, HunterCyan.copy(alpha = 0.4f), Color.Transparent),
@@ -258,7 +274,6 @@ fun StartScreen(onStart: () -> Unit, onExit: () -> Unit) {
                 center = center
             )
             
-            // Inner Gold Glow
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(Color.Transparent, HunterTurquoise.copy(alpha = 0.32f), Color.Transparent),
@@ -269,7 +284,6 @@ fun StartScreen(onStart: () -> Unit, onExit: () -> Unit) {
                 center = center
             )
 
-            // Cyan mechanical ring (spinning)
             drawContext.canvas.nativeCanvas.save()
             drawContext.canvas.nativeCanvas.rotate(rotate, center.x, center.y)
             drawCircle(
@@ -283,7 +297,6 @@ fun StartScreen(onStart: () -> Unit, onExit: () -> Unit) {
             )
             drawContext.canvas.nativeCanvas.restore()
 
-            // Core
             drawCircle(
                 color = HunterBackground,
                 radius = radius * 0.45f,
@@ -300,6 +313,14 @@ fun StartScreen(onStart: () -> Unit, onExit: () -> Unit) {
         }
         TextButton(onClick = onExit) {
             Text("EXIT", color = HunterMetal, letterSpacing = 2.sp)
+        }
+        if (canSaveSession) {
+            TextButton(onClick = onSaveSession) {
+                Text("SAVE LAST SESSION", color = HunterCyan, fontSize = 11.sp, letterSpacing = 1.sp)
+            }
+        }
+        if (exportStatus.isNotEmpty()) {
+            Text(exportStatus, color = HunterCyan, fontSize = 11.sp)
         }
     }
 }
@@ -328,7 +349,12 @@ fun GameScreen(engine: GameEngine, onExit: () -> Unit) {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        GravityGrid(atoms = atoms, resonancePhase = resPhase)
+        GravityGrid(
+            atoms = atoms,
+            resonancePhase = resPhase,
+            targetAtomId = targetAtomId,
+            matchPercent = match
+        )
 
         // Main game canvas for atoms & black hole
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -505,6 +531,14 @@ fun GameScreen(engine: GameEngine, onExit: () -> Unit) {
         ) {
             // COMPACT TOP HUD
             Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("TUNE", color = HunterCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Text("DRAG TO MATCH THE SELECTED ATOM", color = HunterMetal, fontSize = 9.sp, letterSpacing = 0.7.sp)
+            }
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 24.dp, end = 24.dp, top = 48.dp, bottom = 16.dp),
@@ -585,13 +619,42 @@ fun GameScreen(engine: GameEngine, onExit: () -> Unit) {
                     }
                 }
                 
-                // Header for frequencies
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("TARGET: ${target.toInt()} Hz", color = HunterViolet, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text("CARRIER: ${carrier.toInt()} Hz", color = HunterCyan, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Column {
+                        Text("TARGET", color = HunterViolet, fontSize = 9.sp, letterSpacing = 1.5.sp)
+                        Text("${target.toInt()} Hz", color = HunterViolet, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    }
+                    val gap = abs(target - carrier).toInt()
+                    val tuningMessage = when {
+                        target <= 0f -> "WAITING FOR ATOM"
+                        resPhase == ResonancePhase.MATCHED -> "MATCHED · HOLD STEADY"
+                        resPhase == ResonancePhase.STABLE -> "STABLE · KEEP TUNING"
+                        resPhase == ResonancePhase.TRANSFORMED -> "TRANSFORMED"
+                        gap <= 30 -> "IN RESONANCE · Δ ${gap} Hz"
+                        gap <= 100 -> "CLOSING IN · Δ ${gap} Hz"
+                        else -> "TUNE CARRIER · Δ ${gap} Hz"
+                    }
+                    val tuningColor = when (resPhase) {
+                        ResonancePhase.MATCHED -> HunterCyan
+                        ResonancePhase.STABLE, ResonancePhase.TRANSFORMED -> HunterTurquoise
+                        else -> HunterMetal
+                    }
+                    Text(
+                        tuningMessage,
+                        color = tuningColor,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.5.sp,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("CARRIER", color = HunterCyan, fontSize = 9.sp, letterSpacing = 1.5.sp)
+                        Text("${carrier.toInt()} Hz", color = HunterCyan, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 LazyRow(
@@ -623,7 +686,7 @@ fun GameScreen(engine: GameEngine, onExit: () -> Unit) {
                     onFreqChange = { engine.setCarrierFreq(it) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .height(54.dp)
                 )
             }
         }
@@ -634,7 +697,12 @@ private fun reducedMotionEnabled(): Boolean =
     Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !ValueAnimator.areAnimatorsEnabled()
 
 @Composable
-fun GravityGrid(atoms: List<Atom>, resonancePhase: ResonancePhase) {
+fun GravityGrid(
+    atoms: List<Atom>,
+    resonancePhase: ResonancePhase,
+    targetAtomId: Int? = null,
+    matchPercent: Int = 0
+) {
     val reducedMotion = remember { reducedMotionEnabled() }
     val animatedPhase = if (reducedMotion) 0f else {
         val phase by rememberInfiniteTransition(label = "gravity_grid").animateFloat(
@@ -661,13 +729,22 @@ fun GravityGrid(atoms: List<Atom>, resonancePhase: ResonancePhase) {
             )
         }
 
-        val atomMass = if (resonancePhase == ResonancePhase.STABLE) 1.55f else 1f
+        val resonanceBoost = when (resonancePhase) {
+            ResonancePhase.MATCHED -> 1.18f
+            ResonancePhase.STABLE -> 1.42f
+            ResonancePhase.TRANSFORMED -> 1.6f
+            else -> 0.92f + (matchPercent.coerceIn(0, 100) / 100f) * 0.24f
+        }
         val fieldScale = minOf(size.width, size.height) * 0.38f / 300.dp.toPx()
-        val lensPositions = atoms.asSequence().filter { !it.absorbed }.take(5)
-            .map { Offset(center.x + it.x.dp.toPx() * fieldScale, center.y + it.y.dp.toPx() * fieldScale) }.toList()
-        val lensRangeSquared = 90.dp.toPx() * 90.dp.toPx()
-        val lineCount = 12
-        val segments = 32
+        val lensAtoms = atoms.asSequence().filter { !it.absorbed }.take(4).toList()
+        val lensPositions = lensAtoms.map {
+            Offset(center.x + it.x.dp.toPx() * fieldScale, center.y + it.y.dp.toPx() * fieldScale)
+        }
+        val lensRange = 100.dp.toPx()
+        val lensRangeSquared = lensRange * lensRange
+        val lineCount = 14
+        val segments = 40
+        val fieldPulse = if (reducedMotion) 0f else (sin(phase) + 1f) * 0.5f
         for (axis in 0..1) {
             for (line in 0..lineCount) {
                 val path = Path()
@@ -681,22 +758,47 @@ fun GravityGrid(atoms: List<Atom>, resonancePhase: ResonancePhase) {
                         val diffX = x - atomCenter.x
                         val diffY = y - atomCenter.y
                         val distanceSquared = diffX * diffX + diffY * diffY
-                        val influence = (if (index == 0) 0.16f else 0.09f) * atomMass /
+                        val focused = lensAtoms[index].id == targetAtomId
+                        val influence = (if (focused) 0.24f else 0.16f) * resonanceBoost /
                             (1f + distanceSquared / lensRangeSquared)
                         dx -= diffX * influence
                         dy -= diffY * influence
                     }
-                    val lensWave = if (reducedMotion) 0f else sin(progress * Math.PI * 2 + phase) * 3.dp.toPx()
+                    val lensWave = if (reducedMotion) 0f else
+                        sin(progress * (2f * Math.PI.toFloat()) + phase) * 2.dp.toPx()
                     if (axis == 0) dy += lensWave else dx += lensWave
                     val point = Offset(x + dx, y + dy)
                     if (segment == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
                 }
                 drawPath(
                     path,
-                    color = if (line % 3 == 0) HunterCyan.copy(alpha = 0.10f) else HunterTurquoise.copy(alpha = 0.055f),
-                    style = Stroke(width = if (line % 3 == 0) 1.dp.toPx() else 0.6.dp.toPx())
+                    color = if (line % 3 == 0) HunterCyan.copy(alpha = 0.19f) else HunterTurquoise.copy(alpha = 0.11f),
+                    style = Stroke(width = if (line % 3 == 0) 1.1.dp.toPx() else 0.7.dp.toPx())
                 )
             }
+        }
+        lensPositions.forEachIndexed { index, position ->
+            val focused = lensAtoms[index].id == targetAtomId
+            val glowRadius = (if (focused) 42.dp else 32.dp).toPx()
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        (if (focused) HunterCyan else HunterViolet).copy(alpha = 0.17f + fieldPulse * 0.08f),
+                        Color.Transparent
+                    ),
+                    center = position,
+                    radius = glowRadius
+                ),
+                radius = glowRadius,
+                center = position
+            )
+            drawCircle(
+                color = (if (focused) HunterCyan else HunterViolet)
+                    .copy(alpha = if (reducedMotion) 0.28f else 0.22f + fieldPulse * 0.18f),
+                radius = (if (focused) 13.dp else 9.dp).toPx() + if (focused) fieldPulse * 3.dp.toPx() else 0f,
+                center = position,
+                style = Stroke(width = 1.dp.toPx())
+            )
         }
     }
 }
@@ -776,16 +878,37 @@ fun TuneSlider(target: Float, carrier: Float, onFreqChange: (Float) -> Unit, mod
     val minFreq = 100f
     val maxFreq = 700f
     val range = maxFreq - minFreq
-    
+    val reducedMotion = remember { reducedMotionEnabled() }
     var isDragging by remember { mutableStateOf(false) }
-    
     val currentPos = ((carrier - minFreq) / range).coerceIn(0f, 1f)
-    
+    val thumbPosition by animateFloatAsState(currentPos, animationSpec = tween(90), label = "tuner_thumb")
+    val proximity = if (target > 0f) (1f - abs(carrier - target) / 90f).coerceIn(0f, 1f) else 0f
+    val tunerPulse = if (proximity > 0.65f && !reducedMotion) {
+        val pulse by rememberInfiniteTransition(label = "tuner_match").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
+            label = "tuner_match_pulse"
+        )
+        pulse
+    } else {
+        0f
+    }
+    val tuningColor = when {
+        proximity >= 0.92f -> HunterTurquoise
+        proximity >= 0.65f -> HunterCyan
+        else -> Color.White
+    }
+
     Box(
         modifier = modifier
             .semantics {
                 contentDescription = "Carrier frequency"
-                stateDescription = "${carrier.toInt()} hertz"
+                stateDescription = if (target > 0f) {
+                    "${carrier.toInt()} hertz, ${abs(carrier - target).toInt()} hertz from target"
+                } else {
+                    "${carrier.toInt()} hertz, no target selected"
+                }
                 progressBarRangeInfo = androidx.compose.ui.semantics.ProgressBarRangeInfo(currentPos, 0f..1f)
                 setProgress { progress ->
                     onFreqChange(minFreq + progress.coerceIn(0f, 1f) * range)
@@ -802,8 +925,7 @@ fun TuneSlider(target: Float, carrier: Float, onFreqChange: (Float) -> Unit, mod
                     val newX = (change.position.x / width).coerceIn(0f, 1f)
                     val rawFreq = minFreq + newX * range
                     
-                    val activeFreq = if (target > 0f && abs(rawFreq - target) <= 10f) target else rawFreq
-                    onFreqChange(activeFreq)
+                    onFreqChange(rawFreq)
                 }
             }
     ) {
@@ -824,40 +946,55 @@ fun TuneSlider(target: Float, carrier: Float, onFreqChange: (Float) -> Unit, mod
             drawPath(
                 path = Path().apply { addRoundRect(trackRect) },
                 brush = Brush.horizontalGradient(
-                colors = listOf(HunterCyan, HunterViolet, HunterTurquoise)
+                    colors = listOf(HunterCyan.copy(alpha = 0.55f), HunterViolet, HunterTurquoise.copy(alpha = 0.75f))
                 )
             )
+            for (tick in 0..6) {
+                val tickX = tick / 6f * size.width
+                drawLine(
+                    color = HunterBackground.copy(alpha = 0.65f),
+                    start = Offset(tickX, midY - trackHeight * 0.28f),
+                    end = Offset(tickX, midY + trackHeight * 0.28f),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
             
             if (target > 0f) {
                 val targetPos = ((target - minFreq) / range).coerceIn(0f, 1f)
                 val targetX = targetPos * size.width
-                val zoneWidth = (50f / range) * size.width
+                val zoneWidth = (60f / range) * size.width
+                val targetColor = if (proximity >= 0.65f) HunterTurquoise else HunterViolet
                 
                 drawRect(
-                    color = HunterViolet.copy(alpha = 0.4f),
+                    color = targetColor.copy(alpha = 0.28f + proximity * 0.18f),
                     topLeft = Offset(targetX - zoneWidth / 2, midY - trackHeight),
                     size = Size(zoneWidth, trackHeight * 2)
                 )
                 
+                drawCircle(
+                    color = targetColor.copy(alpha = 0.2f + tunerPulse * 0.22f),
+                    radius = 8.dp.toPx() + tunerPulse * 5.dp.toPx(),
+                    center = Offset(targetX, midY)
+                )
                 drawLine(
-                    color = HunterViolet,
+                    color = targetColor,
                     start = Offset(targetX, midY - trackHeight * 1.5f),
                     end = Offset(targetX, midY + trackHeight * 1.5f),
-                    strokeWidth = 2.dp.toPx()
+                    strokeWidth = 2.dp.toPx() + proximity * 1.5.dp.toPx()
                 )
             }
             
-            val thumbX = currentPos * size.width
-            val thumbRadius = if (isDragging) 20.dp.toPx() else 16.dp.toPx()
+            val thumbX = thumbPosition * size.width
+            val thumbRadius = (if (isDragging) 20.dp.toPx() else 16.dp.toPx()) + tunerPulse * 2.dp.toPx()
             
             drawCircle(
-                color = Color.White.copy(alpha = 0.3f),
-                radius = thumbRadius * 1.5f,
+                color = tuningColor.copy(alpha = 0.25f + proximity * 0.3f),
+                radius = thumbRadius * (1.5f + tunerPulse * 0.35f),
                 center = Offset(thumbX, midY)
             )
             
             drawCircle(
-                color = Color.White,
+                color = tuningColor,
                 radius = thumbRadius,
                 center = Offset(thumbX, midY)
             )
@@ -874,21 +1011,26 @@ fun TuneSlider(target: Float, carrier: Float, onFreqChange: (Float) -> Unit, mod
 @Composable
 fun ResultScreen(
     engine: GameEngine,
-    exportStatus: String,
-    onSavePattern: () -> Unit,
     onExit: () -> Unit
 ) {
     val sequence by engine.capturedSequence.collectAsState()
     val session by engine.captureSession.collectAsState()
-    val stats by engine.stabilizedCount.collectAsState()
     val playingIndex by engine.playingNoteIndex.collectAsState()
     val isMelodyPlaying by engine.isMelodyPlaying.collectAsState()
-    val volume by engine.musicVolume.collectAsState()
-    val galaxyStars = remember(session) { UniverseLayout.generate(session) }
+    val galaxyStars = remember(session) { UniverseLayout.generate(session, maxParticles = 1_400) }
+    val atomStars = remember(galaxyStars) { galaxyStars.filter { it.isAtom } }
     val reducedMotion = remember { reducedMotionEnabled() }
 
+    var hasPlayed by remember(session) { mutableStateOf(false) }
     var animTrigger by remember { mutableStateOf(0) }
     val animProgress = remember { Animatable(0f) }
+
+    LaunchedEffect(session) {
+        if (session.events.isNotEmpty()) {
+            hasPlayed = true
+            engine.playResultMelody()
+        }
+    }
 
     LaunchedEffect(animTrigger) {
         animProgress.snapTo(0f)
@@ -914,41 +1056,28 @@ fun ResultScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 36.dp),
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 1. Header
         Text(
-            text = "ATOM HUNT / COMPLETE",
-            fontSize = 26.sp,
+            text = "ATOM HUNTER",
+            fontSize = 18.sp,
             color = HunterCyan,
-            style = AtomHunterWordmarkStyle.copy(fontSize = 26.sp, letterSpacing = 2.sp)
+            style = AtomHunterWordmarkStyle.copy(fontSize = 18.sp, letterSpacing = 3.sp),
+            modifier = Modifier.padding(vertical = 6.dp)
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = "${sequence.size} ATOMS CAPTURED",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-            color = HunterTurquoise,
-            letterSpacing = 2.sp
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 2. Black Hole / Universe Visual Animation Canvas
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(250.dp)
+                .weight(1f)
                 .clip(RoundedCornerShape(20.dp)),
             contentAlignment = Alignment.Center
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val center = Offset(size.width / 2, size.height / 2)
-                val maxRadius = minOf(size.width * 0.46f, size.height * 0.48f)
+                val maxRadius = minOf(size.width * 0.49f, size.height * 0.49f)
                 val progress = animProgress.value
                 val pulse = pulseAnim.value
                 val collapse = (1f - progress / 0.34f).coerceIn(0.04f, 1f)
@@ -965,7 +1094,6 @@ fun ResultScreen(
                 )
                 drawCircle(HunterBackground, radius = maxRadius * 0.14f * collapse, center = center)
 
-                val atomStars = galaxyStars.filter { it.isAtom }
                 if (atomStars.size > 1) {
                     val constellation = Path()
                     atomStars.forEachIndexed { index, star ->
@@ -975,7 +1103,7 @@ fun ResultScreen(
                         )
                         if (index == 0) constellation.moveTo(point.x, point.y) else constellation.lineTo(point.x, point.y)
                     }
-                    drawPath(constellation, HunterCyan.copy(alpha = 0.18f * expansion), style = Stroke(width = 1.dp.toPx()))
+                    drawPath(constellation, HunterCyan.copy(alpha = 0.28f * expansion), style = Stroke(width = 1.dp.toPx()))
                 }
 
                 galaxyStars.forEach { star ->
@@ -988,11 +1116,20 @@ fun ResultScreen(
                     val color = galaxyColor(star.elementSymbol)
                     val alpha = star.opacity * if (star.isAtom) 0.72f + expansion * 0.28f else expansion
                     drawCircle(
-                        color = color.copy(alpha = (alpha + if (highlighted) pulse * 0.4f else 0f).coerceIn(0f, 1f)),
+                        color = color.copy(alpha = (alpha + if (highlighted) pulse * 0.55f else 0f).coerceIn(0f, 1f)),
                         radius = star.size.dp.toPx() * (1f + drift + if (highlighted) pulse * 0.5f else 0f),
                         center = point
                     )
                     if (highlighted) {
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                listOf(HunterCyan.copy(alpha = pulse * 0.38f), Color.Transparent),
+                                center = point,
+                                radius = star.size.dp.toPx() * 7f
+                            ),
+                            radius = star.size.dp.toPx() * 7f,
+                            center = point
+                        )
                         drawCircle(
                             color = HunterCyan.copy(alpha = 0.75f),
                             radius = star.size.dp.toPx() * (2.3f + pulse),
@@ -1013,197 +1150,38 @@ fun ResultScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            "120 BPM  ·  ATOM-FREQUENCY LEAD  ·  INDUSTRIAL PULSE",
-            color = HunterMetal,
-            fontSize = 10.sp,
-            letterSpacing = 1.sp
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Captures, arrangement, and galaxy all share this ordered event sequence.
-        Text(
-            text = "CAPTURED SEQUENCE",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.Gray,
-            letterSpacing = 2.sp
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (sequence.isEmpty()) {
-            Text(
-                text = "No atoms captured during this hunt.",
-                fontSize = 13.sp,
-                color = Color.White.copy(alpha = 0.6f)
-            )
-        } else {
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp)
-            ) {
-                itemsIndexed(sequence) { index, elem ->
-                    val isPlayingThis = playingIndex == index
-
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                color = if (isPlayingThis) galaxyColor(elem.symbol).copy(alpha = 0.35f) else HunterSurface,
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                            .border(
-                                width = if (isPlayingThis) 2.dp else 1.dp,
-                                color = if (isPlayingThis) HunterCyan else galaxyColor(elem.symbol).copy(alpha = 0.6f),
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = elem.symbol,
-                                color = if (isPlayingThis) Color.White else galaxyColor(elem.symbol),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "${elem.frequency.toInt()}Hz",
-                                color = HunterMetal,
-                                fontSize = 10.sp
-                            )
-                        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Button(
+                onClick = {
+                    if (isMelodyPlaying) {
+                        engine.stopResultMelody()
+                    } else {
+                        animTrigger++
+                        engine.replayResultAnimationAndMelody()
                     }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 4. ATOM VAULT BREAKDOWN
-        Text(
-            text = "ATOM VAULT",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.Gray,
-            letterSpacing = 2.sp
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            Element.values().forEach { el ->
-                val count = stats[el] ?: 0
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = el.symbol,
-                        color = el.color,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "×$count",
-                        color = Color.White,
-                        fontSize = 14.sp
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = onSavePattern,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = HunterTurquoise)
-        ) {
-            Text("SAVE SESSION PATTERN", letterSpacing = 1.sp)
-        }
-        if (exportStatus.isNotEmpty()) {
-            Text(exportStatus, color = HunterCyan, fontSize = 12.sp)
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("VOLUME", color = HunterMetal, fontSize = 11.sp, letterSpacing = 1.sp)
-            Slider(
-                value = volume,
-                onValueChange = { engine.setMusicVolume(it) },
-                modifier = Modifier.weight(1f).padding(start = 12.dp),
-                valueRange = 0f..1f
-            )
-            Text("${(volume * 100).toInt()}%", color = HunterCyan, fontSize = 11.sp)
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
-        ) {
-            Button(
-                onClick = { engine.playResultMelody() },
+                },
                 enabled = sequence.isNotEmpty(),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isMelodyPlaying) HunterViolet else HunterTurquoise
+                )
             ) {
-                Text(if (isMelodyPlaying) "PLAYING..." else "PLAY MELODY", fontSize = 12.sp)
-            }
-
-            Button(
-                onClick = { engine.stopResultMelody() },
-                enabled = isMelodyPlaying,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("STOP", fontSize = 12.sp)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
-        ) {
-            Button(
-                onClick = {
-                    animTrigger++
-                    engine.replayResultAnimationAndMelody()
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("REPLAY", fontSize = 11.sp)
-            }
-
-            Button(
-                onClick = {
-                    engine.stopResultMelody()
-                    engine.startGame()
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("NEW HUNT", fontSize = 11.sp)
-            }
-
-            Button(
-                onClick = {
-                    engine.stopResultMelody()
-                    engine.resetToHome()
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("HOME", fontSize = 11.sp)
+                Text(
+                    if (isMelodyPlaying) "STOP" else if (hasPlayed) "REPLAY" else "PLAY",
+                    modifier = Modifier.semantics { contentDescription = if (isMelodyPlaying) "Stop playback" else if (hasPlayed) "Replay composition" else "Play composition" }
+                )
             }
             Button(
                 onClick = onExit,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = HunterSurface)
             ) {
-                Text("EXIT", fontSize = 11.sp)
+                Text("EXIT", color = HunterCyan)
             }
         }
     }

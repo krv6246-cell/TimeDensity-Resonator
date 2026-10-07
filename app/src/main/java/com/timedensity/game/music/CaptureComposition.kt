@@ -62,7 +62,7 @@ object TrackComposer {
                 fundamentalHz = event.frequencyHz,
                 bassHz = event.frequencyHz / 2f,
                 onsetMs = onset,
-                durationMs = 430L,
+                durationMs = (event.heldForMs * 0.55f).toLong().coerceIn(220L, 560L),
                 precision = event.precision.coerceIn(0f, 1f)
             )
         }
