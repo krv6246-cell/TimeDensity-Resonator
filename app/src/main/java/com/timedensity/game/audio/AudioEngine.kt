@@ -227,19 +227,23 @@ class AudioEngine {
         activeVoices.add(ToneVoice(safeFrequency, totalSamples, 0, amplitude, waveform))
     }
 
+    private fun playCompositionLead(note: TrackNote) {
+        val energy = 0.55f + note.precision * 0.45f
+        playSynthVoice(note.fundamentalHz, note.durationMs, 0.12f * energy, Waveform.TRIANGLE)
+        playSynthVoice(note.bassHz, note.durationMs + 120L, 0.08f * energy, Waveform.SAW)
+        // Add a nice ambient fifth harmony pad
+        playSynthVoice(note.fundamentalHz * 1.5f, note.durationMs + 200L, 0.035f * energy, Waveform.SINE)
+        playSynthVoice(note.fundamentalHz * 2f, note.durationMs / 2L, 0.02f * energy, Waveform.SINE)
+    }
+
     private fun playSoftBeat() {
-        playSynthVoice(92f, 300L, 0.055f, Waveform.SINE)
+        playSynthVoice(55f, 400L, 0.15f, Waveform.KICK)
+        playSynthVoice(220f, 100L, 0.02f, Waveform.NOISE)
     }
 
     private fun playSoftAccent() {
-        playSynthVoice(146.83f, 220L, 0.025f, Waveform.SINE)
-    }
-
-    private fun playCompositionLead(note: TrackNote) {
-        val energy = 0.55f + note.precision * 0.45f
-        playSynthVoice(note.fundamentalHz, note.durationMs, 0.10f * energy, Waveform.SINE)
-        playSynthVoice(note.bassHz, note.durationMs + 80L, 0.05f * energy, Waveform.SINE)
-        playSynthVoice(note.fundamentalHz * 2f, note.durationMs / 2L, 0.012f * energy, Waveform.SINE)
+        playSynthVoice(146.83f, 250L, 0.05f, Waveform.TRIANGLE)
+        playSynthVoice(440f, 80L, 0.015f, Waveform.NOISE)
     }
 
     suspend fun playComposition(

@@ -49,6 +49,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.timedensity.game.engine.GameEngine
@@ -632,29 +633,12 @@ fun GameScreen(engine: GameEngine, onExit: () -> Unit) {
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .padding(
-                        bottom = if (compactLayout) 12.dp else 48.dp,
+                        bottom = if (compactLayout) 12.dp else 36.dp,
                         start = 24.dp,
                         end = 24.dp
                     )
                     .onSizeChanged { bottomOverlayHeight = it.height }
             ) {
-                // ATOM VAULT INDICATOR
-                val stats by engine.stabilizedCount.collectAsState()
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = if (compactLayout) 10.dp else 24.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Element.values().forEach { el ->
-                        val count = stats[el] ?: 0
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(el.symbol, color = el.color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text(count.toString(), color = Color.White, fontSize = 14.sp)
-                        }
-                    }
-                }
-                
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -918,6 +902,12 @@ fun TuneSlider(target: Float, carrier: Float, onFreqChange: (Float) -> Unit, mod
     var isDragging by remember { mutableStateOf(false) }
     val currentPos = ((carrier - minFreq) / range).coerceIn(0f, 1f)
     val thumbPosition by animateFloatAsState(currentPos, animationSpec = tween(90), label = "tuner_thumb")
+    val pulse by rememberInfiniteTransition("sliderPulse").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1500), RepeatMode.Reverse),
+        label = "tuner_pulse"
+    )
 
     Box(
         modifier = modifier
@@ -942,62 +932,108 @@ fun TuneSlider(target: Float, carrier: Float, onFreqChange: (Float) -> Unit, mod
                 ) { change, _ ->
                     val width = size.width.toFloat()
                     val newX = (change.position.x / width).coerceIn(0f, 1f)
-                    val rawFreq = minFreq + newX * range
-                    
-                    onFreqChange(rawFreq)
+                    onFreqChange(minFreq + newX * range)
                 }
             }
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val trackHeight = 12.dp.toPx()
             val midY = size.height / 2
             
-            val trackRect = RoundRect(
-                rect = Rect(
-                    left = 0f, 
-                    top = midY - trackHeight / 2, 
-                    right = size.width, 
-                    bottom = midY + trackHeight / 2
-                ),
-                cornerRadius = CornerRadius(trackHeight / 2, trackHeight / 2)
+            // Cyberpunk grid/track lines
+            drawLine(
+                color = HunterCyan.copy(alpha = 0.2f),
+                start = Offset(0f, midY),
+                end = Offset(size.width, midY),
+                strokeWidth = 1.dp.toPx()
             )
             
-            drawPath(
-                path = Path().apply { addRoundRect(trackRect) },
-                brush = Brush.horizontalGradient(
-                    colors = listOf(HunterCyan.copy(alpha = 0.55f), HunterViolet, HunterTurquoise.copy(alpha = 0.75f))
-                )
+            // Glowing energy segment up to thumb
+            val thumbX = thumbPosition * size.width
+            drawLine(
+                brush = Brush.horizontalGradient(listOf(HunterViolet.copy(alpha = 0.3f), HunterCyan)),
+                start = Offset(0f, midY),
+                end = Offset(thumbX, midY),
+                strokeWidth = 3.dp.toPx(),
+                cap = Stroke.DefaultCap
             )
-            for (tick in 0..6) {
-                val tickX = tick / 6f * size.width
+            
+            // Fine ticks
+            for (tick in 0..20) {
+                val tickX = (tick / 20f) * size.width
+                val isMajor = tick % 5 == 0
+                val tickHeight = if (isMajor) 8.dp.toPx() else 4.dp.toPx()
+                val tickAlpha = if (tickX <= thumbX) 0.6f else 0.2f
                 drawLine(
-                    color = HunterBackground.copy(alpha = 0.65f),
-                    start = Offset(tickX, midY - trackHeight * 0.28f),
-                    end = Offset(tickX, midY + trackHeight * 0.28f),
-                    strokeWidth = 1.dp.toPx()
+                    color = HunterCyan.copy(alpha = tickAlpha),
+                    start = Offset(tickX, midY - tickHeight),
+                    end = Offset(tickX, midY + tickHeight),
+                    strokeWidth = (if (isMajor) 1.5.dp else 1.dp).toPx()
                 )
             }
             
-            val thumbX = thumbPosition * size.width
-            val thumbRadius = if (isDragging) 20.dp.toPx() else 16.dp.toPx()
+            // Target Bracket Highlight
+            if (target > 0f) {
+                val targetPos = ((target - minFreq) / range).coerceIn(0f, 1f)
+                val targetX = targetPos * size.width
+                val zoneWidth = (50f / range) * size.width
+                
+                // Target Zone Glow
+                drawRect(
+                    color = HunterViolet.copy(alpha = 0.15f + pulse * 0.15f),
+                    topLeft = Offset(targetX - zoneWidth / 2, midY - 12.dp.toPx()),
+                    size = Size(zoneWidth, 24.dp.toPx())
+                )
+                
+                // Left Bracket
+                val brWidth = 3.dp.toPx()
+                val brHeight = 10.dp.toPx()
+                val leftEdge = targetX - zoneWidth / 2
+                drawLine(HunterViolet, Offset(leftEdge, midY - brHeight), Offset(leftEdge, midY + brHeight), strokeWidth = 1.5.dp.toPx())
+                drawLine(HunterViolet, Offset(leftEdge, midY - brHeight), Offset(leftEdge + brWidth, midY - brHeight), strokeWidth = 1.5.dp.toPx())
+                drawLine(HunterViolet, Offset(leftEdge, midY + brHeight), Offset(leftEdge + brWidth, midY + brHeight), strokeWidth = 1.5.dp.toPx())
+                
+                // Right Bracket
+                val rightEdge = targetX + zoneWidth / 2
+                drawLine(HunterViolet, Offset(rightEdge, midY - brHeight), Offset(rightEdge, midY + brHeight), strokeWidth = 1.5.dp.toPx())
+                drawLine(HunterViolet, Offset(rightEdge, midY - brHeight), Offset(rightEdge - brWidth, midY - brHeight), strokeWidth = 1.5.dp.toPx())
+                drawLine(HunterViolet, Offset(rightEdge, midY + brHeight), Offset(rightEdge - brWidth, midY + brHeight), strokeWidth = 1.5.dp.toPx())
+            }
             
+            // Thumb
+            val thumbRadius = if (isDragging) 18.dp.toPx() else 14.dp.toPx()
+            
+            // Outer Ring
             drawCircle(
-                color = HunterCyan.copy(alpha = 0.4f),
-                radius = thumbRadius * 1.5f,
-                center = Offset(thumbX, midY)
+                color = HunterTurquoise.copy(alpha = if (isDragging) 0.6f else 0.2f),
+                radius = thumbRadius * (1f + pulse * 0.5f),
+                center = Offset(thumbX, midY),
+                style = Stroke(width = 1.dp.toPx())
             )
-            
+            // Core
             drawCircle(
                 color = HunterCyan,
                 radius = thumbRadius,
                 center = Offset(thumbX, midY)
             )
-            
+            // Inner hollow
             drawCircle(
                 color = HunterBackground,
-                radius = thumbRadius * 0.4f,
+                radius = thumbRadius * 0.5f,
                 center = Offset(thumbX, midY)
             )
+            
+            // Frequency Text on Thumb
+            if (isDragging) {
+                drawContext.canvas.nativeCanvas.apply {
+                    val paint = Paint().apply {
+                        color = android.graphics.Color.WHITE
+                        textSize = 12.dp.toPx()
+                        textAlign = Paint.Align.CENTER
+                        isAntiAlias = true
+                    }
+                    drawText("${carrier.toInt()}Hz", thumbX, midY - thumbRadius - 8.dp.toPx(), paint)
+                }
+            }
         }
     }
 }
@@ -1011,15 +1047,17 @@ fun ResultScreen(
     val session by engine.captureSession.collectAsState()
     val playingIndex by engine.playingNoteIndex.collectAsState()
     val isMelodyPlaying by engine.isMelodyPlaying.collectAsState()
-    val galaxyStars = remember(session) { UniverseLayout.generate(session, maxParticles = 1_400) }
+    val galaxyStars = remember(session) { UniverseLayout.generate(session, maxParticles = 2_000) }
     val atomStars = remember(galaxyStars) { galaxyStars.filter { it.isAtom } }
     val reducedMotion = remember { reducedMotionEnabled() }
+    
+    // Spinning galaxy core rotation
     val galaxyRotation = if (reducedMotion) 0f else {
         val rotation by rememberInfiniteTransition(label = "galaxy_drift").animateFloat(
             initialValue = 0f,
             targetValue = 360f,
             animationSpec = infiniteRepeatable(
-                tween(durationMillis = 180_000, easing = LinearEasing)
+                tween(durationMillis = 60_000, easing = LinearEasing)
             ),
             label = "galaxy_rotation"
         )
@@ -1048,7 +1086,8 @@ fun ResultScreen(
         } else {
             animProgress.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 2500, easing = FastOutSlowInEasing)
+                // Make the timeline slightly longer for more dramatic effect
+                animationSpec = tween(durationMillis = 3500, easing = FastOutSlowInEasing)
             )
         }
     }
@@ -1093,21 +1132,81 @@ fun ResultScreen(
                 val maxRadius = minOf(size.width * 0.49f, size.height * 0.49f)
                 val progress = animProgress.value
                 val pulse = pulseAnim.value
-                val collapse = (1f - progress / 0.34f).coerceIn(0.04f, 1f)
-                val expansion = if (progress < 0.34f) 0.08f else ((progress - 0.34f) / 0.66f).coerceIn(0f, 1f)
-                val radiusScale = if (progress < 0.34f) collapse else 0.18f + expansion * 0.82f
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(HunterViolet.copy(alpha = 0.20f + pulse * 0.1f), HunterCyan.copy(alpha = 0.05f), Color.Transparent),
-                        center = center,
-                        radius = maxRadius
-                    ),
-                    radius = maxRadius,
-                    center = center
-                )
-                drawCircle(HunterBackground, radius = maxRadius * 0.14f * collapse, center = center)
+                
+                // Timeline: 
+                // 0.0 - 0.4: Implosion / Collapse
+                // 0.4 - 0.5: Flash (Supernova)
+                // 0.5 - 1.0: Expansion
+                val collapsePhase = 0.4f
+                val flashPhase = 0.5f
 
-                if (atomStars.size > 1) {
+                val collapse = if (progress < collapsePhase) 1f - (progress / collapsePhase) else 0.01f
+                val expansion = if (progress < flashPhase) 0f else ((progress - flashPhase) / (1f - flashPhase)).coerceIn(0f, 1f)
+                
+                // Shockwave flash calculation
+                val flashIntensity = when {
+                    progress < collapsePhase -> 0f
+                    progress < flashPhase -> (progress - collapsePhase) / (flashPhase - collapsePhase) // Build up
+                    progress < flashPhase + 0.1f -> 1f - ((progress - flashPhase) / 0.1f) // Fast fade
+                    else -> 0f
+                }
+
+                // 1. NEBULA BACKGROUND (Fades in during expansion)
+                if (expansion > 0f) {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                HunterViolet.copy(alpha = 0.35f * expansion),
+                                HunterTurquoise.copy(alpha = 0.1f * expansion),
+                                Color.Transparent
+                            ),
+                            center = center,
+                            radius = maxRadius * 1.5f
+                        ),
+                        radius = maxRadius * 1.5f,
+                        center = center
+                    )
+                }
+
+                // 2. SUPERNOVA FLASH
+                if (flashIntensity > 0f) {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(Color.White.copy(alpha = flashIntensity), HunterCyan.copy(alpha = flashIntensity * 0.5f), Color.Transparent),
+                            center = center,
+                            radius = maxRadius * 2f
+                        ),
+                        radius = maxRadius * 2f,
+                        center = center
+                    )
+                    // High-energy shockwave ring
+                    drawCircle(
+                        color = Color.White.copy(alpha = flashIntensity),
+                        radius = maxRadius * 0.8f * flashIntensity,
+                        center = center,
+                        style = Stroke(width = 4.dp.toPx() * flashIntensity)
+                    )
+                }
+
+                // 3. COLLAPSING CORE & EXPANDING GALAXY
+                val radiusScale = if (progress < collapsePhase) collapse else 0.1f + expansion * 0.9f
+                
+                // Draw central black hole / singularity during collapse
+                if (progress < flashPhase) {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(HunterViolet.copy(alpha = 0.5f * collapse), Color.Transparent),
+                            center = center,
+                            radius = maxRadius * collapse
+                        ),
+                        radius = maxRadius * collapse,
+                        center = center
+                    )
+                    drawCircle(HunterBackground, radius = maxRadius * 0.15f * collapse, center = center)
+                }
+
+                // Constellation lines linking the captured atoms
+                if (atomStars.size > 1 && expansion > 0f) {
                     val constellation = Path()
                     atomStars.forEachIndexed { index, star ->
                         val point = Offset(
@@ -1116,48 +1215,59 @@ fun ResultScreen(
                         )
                         if (index == 0) constellation.moveTo(point.x, point.y) else constellation.lineTo(point.x, point.y)
                     }
-                    drawPath(constellation, HunterCyan.copy(alpha = 0.28f * expansion), style = Stroke(width = 1.dp.toPx()))
+                    drawPath(constellation, HunterCyan.copy(alpha = 0.4f * expansion), style = Stroke(width = 1.dp.toPx()))
                 }
 
-                galaxyStars.forEach { star ->
-                    val drift = if (reducedMotion) 0f else progress * 0.04f
-                    val point = Offset(
-                        center.x + (star.x - 0.5f) * maxRadius * 2f * radiusScale,
-                        center.y + (star.y - 0.48f) * maxRadius * 2f * radiusScale
-                    )
-                    val highlighted = star.isAtom && star.eventIndex == playingIndex
-                    val color = galaxyColor(star.elementSymbol)
-                    val alpha = star.opacity * if (star.isAtom) 0.72f + expansion * 0.28f else expansion
-                    drawCircle(
-                        color = color.copy(alpha = (alpha + if (highlighted) pulse * 0.55f else 0f).coerceIn(0f, 1f)),
-                        radius = star.size.dp.toPx() * (1f + drift + if (highlighted) pulse * 0.5f else 0f),
-                        center = point
-                    )
-                    if (highlighted) {
+                // Particle rendering (galaxies + atoms)
+                if (progress < collapsePhase || expansion > 0f) {
+                    galaxyStars.forEach { star ->
+                        val drift = if (reducedMotion) 0f else progress * 0.05f
+                        val point = Offset(
+                            center.x + (star.x - 0.5f) * maxRadius * 2f * radiusScale,
+                            center.y + (star.y - 0.48f) * maxRadius * 2f * radiusScale
+                        )
+                        val highlighted = star.isAtom && star.eventIndex == playingIndex
+                        val color = galaxyColor(star.elementSymbol)
+                        val alpha = if (progress < collapsePhase) {
+                            star.opacity * collapse // fading in collapse
+                        } else {
+                            star.opacity * if (star.isAtom) 0.8f + expansion * 0.2f else expansion // fading in expansion
+                        }
+
                         drawCircle(
-                            brush = Brush.radialGradient(
-                                listOf(HunterCyan.copy(alpha = pulse * 0.38f), Color.Transparent),
-                                center = point,
-                                radius = star.size.dp.toPx() * 7f
-                            ),
-                            radius = star.size.dp.toPx() * 7f,
+                            color = color.copy(alpha = (alpha + if (highlighted) pulse * 0.6f else 0f).coerceIn(0f, 1f)),
+                            radius = star.size.dp.toPx() * (1f + drift + if (highlighted) pulse * 0.5f else 0f),
                             center = point
                         )
-                        drawCircle(
-                            color = HunterCyan.copy(alpha = 0.75f),
-                            radius = star.size.dp.toPx() * (2.3f + pulse),
-                            center = point,
-                            style = Stroke(width = 1.5.dp.toPx())
-                        )
+                        
+                        // Atom highlights during melody
+                        if (highlighted && expansion > 0f) {
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    listOf(HunterCyan.copy(alpha = pulse * 0.5f), Color.Transparent),
+                                    center = point,
+                                    radius = star.size.dp.toPx() * 8f
+                                ),
+                                radius = star.size.dp.toPx() * 8f,
+                                center = point
+                            )
+                            drawCircle(
+                                color = Color.White.copy(alpha = pulse),
+                                radius = star.size.dp.toPx() * (2.5f + pulse),
+                                center = point,
+                                style = Stroke(width = 2.dp.toPx())
+                            )
+                        }
                     }
                 }
 
-                if (pulse > 0f) {
+                // Global pulse from melody
+                if (pulse > 0f && expansion > 0.5f) {
                     drawCircle(
-                        color = HunterViolet.copy(alpha = pulse * 0.7f),
-                        radius = maxRadius * (0.4f + (1f - pulse) * 0.6f),
+                        color = HunterTurquoise.copy(alpha = pulse * 0.5f),
+                        radius = maxRadius * (0.6f + (1f - pulse) * 0.4f),
                         center = center,
-                        style = Stroke(width = 3.dp.toPx() * pulse)
+                        style = Stroke(width = 2.dp.toPx() * pulse)
                     )
                 }
             }
@@ -1186,7 +1296,10 @@ fun ResultScreen(
             ) {
                 Text(
                     if (isMelodyPlaying) "STOP" else if (hasPlayed) "REPLAY" else "PLAY",
-                    modifier = Modifier.semantics { contentDescription = if (isMelodyPlaying) "Stop playback" else if (hasPlayed) "Replay composition" else "Play composition" }
+                    modifier = Modifier.semantics { contentDescription = if (isMelodyPlaying) "Stop playback" else if (hasPlayed) "Replay composition" else "Play composition" },
+                    color = HunterBackground,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
                 )
             }
             Button(
@@ -1194,11 +1307,12 @@ fun ResultScreen(
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(containerColor = HunterSurface)
             ) {
-                Text("EXIT", color = HunterCyan)
+                Text("EXIT", color = HunterCyan, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             }
         }
     }
 }
+
 
 private fun galaxyColor(symbol: String): Color = when (symbol) {
     "H", "N", "O" -> HunterCyan
