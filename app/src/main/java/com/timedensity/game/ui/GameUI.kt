@@ -1057,7 +1057,7 @@ fun ResultScreen(
             initialValue = 0f,
             targetValue = 360f,
             animationSpec = infiniteRepeatable(
-                tween(durationMillis = 15_000, easing = LinearEasing) // Fast spin!
+                tween(durationMillis = 40_000, easing = LinearEasing) // Majestic slow spin
             ),
             label = "galaxy_rotation"
         )
@@ -1086,8 +1086,7 @@ fun ResultScreen(
         } else {
             animProgress.animateTo(
                 targetValue = 1f,
-                // Fast and punchy timeline
-                animationSpec = tween(durationMillis = 1500, easing = FastOutSlowInEasing)
+                animationSpec = tween(durationMillis = 3500, easing = FastOutSlowInEasing)
             )
         }
     }
@@ -1097,7 +1096,7 @@ fun ResultScreen(
         if (playingIndex >= 0) {
             pulseAnim.snapTo(1f)
             if (reducedMotion) pulseAnim.snapTo(0f)
-            else pulseAnim.animateTo(0f, animationSpec = tween(150)) // Fast sharp pulse
+            else pulseAnim.animateTo(0f, animationSpec = tween(600)) // Smooth ambient pulse
         }
     }
 
@@ -1126,28 +1125,27 @@ fun ResultScreen(
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { rotationZ = galaxyRotation }
+                    .graphicsLayer { 
+                        rotationX = 55f // 3D Perspective Tilt!
+                        rotationZ = galaxyRotation 
+                        cameraDistance = 12 * density
+                    }
             ) {
                 val center = Offset(size.width / 2, size.height / 2)
                 val maxRadius = minOf(size.width * 0.49f, size.height * 0.49f)
                 val progress = animProgress.value
                 val pulse = pulseAnim.value
                 
-                // Timeline: 
-                // 0.0 - 0.4: Implosion / Collapse
-                // 0.4 - 0.5: Flash (Supernova)
-                // 0.5 - 1.0: Expansion
                 val collapsePhase = 0.4f
                 val flashPhase = 0.5f
 
                 val collapse = if (progress < collapsePhase) 1f - (progress / collapsePhase) else 0.01f
                 val expansion = if (progress < flashPhase) 0f else ((progress - flashPhase) / (1f - flashPhase)).coerceIn(0f, 1f)
                 
-                // Shockwave flash calculation
                 val flashIntensity = when {
                     progress < collapsePhase -> 0f
-                    progress < flashPhase -> (progress - collapsePhase) / (flashPhase - collapsePhase) // Build up
-                    progress < flashPhase + 0.1f -> 1f - ((progress - flashPhase) / 0.1f) // Fast fade
+                    progress < flashPhase -> (progress - collapsePhase) / (flashPhase - collapsePhase)
+                    progress < flashPhase + 0.1f -> 1f - ((progress - flashPhase) / 0.1f)
                     else -> 0f
                 }
 
@@ -1179,7 +1177,6 @@ fun ResultScreen(
                         radius = maxRadius * 2f,
                         center = center
                     )
-                    // High-energy shockwave ring
                     drawCircle(
                         color = Color.White.copy(alpha = flashIntensity),
                         radius = maxRadius * 0.8f * flashIntensity,
@@ -1191,7 +1188,6 @@ fun ResultScreen(
                 // 3. COLLAPSING CORE & EXPANDING GALAXY
                 val radiusScale = if (progress < collapsePhase) collapse else 0.1f + expansion * 0.9f
                 
-                // Draw central black hole / singularity during collapse
                 if (progress < flashPhase) {
                     drawCircle(
                         brush = Brush.radialGradient(
@@ -1205,63 +1201,93 @@ fun ResultScreen(
                     drawCircle(HunterBackground, radius = maxRadius * 0.15f * collapse, center = center)
                 }
 
-                // Constellation lines linking the captured atoms
-                if (atomStars.size > 1 && expansion > 0f) {
-                    val constellation = Path()
-                    atomStars.forEachIndexed { index, star ->
-                        val point = Offset(
-                            center.x + (star.x - 0.5f) * maxRadius * 2f * radiusScale,
-                            center.y + (star.y - 0.48f) * maxRadius * 2f * radiusScale
-                        )
-                        if (index == 0) constellation.moveTo(point.x, point.y) else constellation.lineTo(point.x, point.y)
+                // Calculate geometric layout positions for atoms
+                val geomRadius = maxRadius * 0.45f
+                val N = sequence.size
+                val atomPositions = sequence.mapIndexed { index, _ ->
+                    val angle = (index.toFloat() / N.coerceAtLeast(1)) * 2f * Math.PI.toFloat() + (progress * 2f)
+                    val targetX = center.x + cos(angle) * geomRadius
+                    val targetY = center.y + sin(angle) * geomRadius
+                    
+                    val star = atomStars.getOrNull(index)
+                    if (star != null) {
+                        val startX = center.x + (star.x - 0.5f) * maxRadius * 2f * radiusScale
+                        val startY = center.y + (star.y - 0.48f) * maxRadius * 2f * radiusScale
+                        
+                        val currentX = startX + (targetX - startX) * expansion
+                        val currentY = startY + (targetY - startY) * expansion
+                        Offset(currentX, currentY)
+                    } else {
+                        Offset(targetX, targetY)
                     }
-                    drawPath(constellation, HunterCyan.copy(alpha = 0.4f * expansion), style = Stroke(width = 1.dp.toPx()))
                 }
 
-                // Particle rendering (galaxies + atoms)
-                if (progress < collapsePhase || expansion > 0f) {
-                    galaxyStars.forEach { star ->
-                        val drift = if (reducedMotion) 0f else progress * 0.05f
-                        val point = Offset(
+                // Sacred geometry connections forming the geometric figure
+                if (atomPositions.size > 1 && expansion > 0f) {
+                    val path = Path()
+                    atomPositions.forEachIndexed { i, pos ->
+                        if (i == 0) path.moveTo(pos.x, pos.y) else path.lineTo(pos.x, pos.y)
+                    }
+                    path.close()
+                    drawPath(path, HunterCyan.copy(alpha = 0.5f * expansion), style = Stroke(width = 3.dp.toPx()))
+                    
+                    if (atomPositions.size in 3..12) {
+                        for (i in 0 until atomPositions.size) {
+                            for (j in i + 2 until atomPositions.size) {
+                                if (i == 0 && j == atomPositions.size - 1) continue
+                                drawLine(HunterCyan.copy(alpha = 0.15f * expansion), atomPositions[i], atomPositions[j], 1.dp.toPx())
+                            }
+                        }
+                    }
+                }
+
+                var atomIndex = 0
+                galaxyStars.forEach { star ->
+                    val drift = if (reducedMotion) 0f else progress * 0.05f
+                    
+                    val point = if (star.isAtom && atomIndex < atomPositions.size) {
+                        atomPositions[atomIndex++]
+                    } else {
+                        Offset(
                             center.x + (star.x - 0.5f) * maxRadius * 2f * radiusScale,
                             center.y + (star.y - 0.48f) * maxRadius * 2f * radiusScale
                         )
-                        val highlighted = star.isAtom && star.eventIndex == playingIndex
-                        val color = galaxyColor(star.elementSymbol)
-                        val alpha = if (progress < collapsePhase) {
-                            star.opacity * collapse // fading in collapse
-                        } else {
-                            star.opacity * if (star.isAtom) 0.8f + expansion * 0.2f else expansion // fading in expansion
-                        }
+                    }
+                    
+                    val highlighted = star.isAtom && star.eventIndex == playingIndex
+                    val color = galaxyColor(star.elementSymbol)
+                    val alpha = if (progress < collapsePhase) {
+                        star.opacity * collapse 
+                    } else {
+                        star.opacity * if (star.isAtom) 0.8f + expansion * 0.2f else expansion 
+                    }
 
+                    drawCircle(
+                        color = color.copy(alpha = (alpha + if (highlighted) pulse * 0.6f else 0f).coerceIn(0f, 1f)),
+                        radius = star.size.dp.toPx() * (1f + drift + if (highlighted) pulse * 0.5f else 0f),
+                        center = point
+                    )
+                    
+                    // Atom highlights during melody
+                    if (highlighted && expansion > 0f) {
                         drawCircle(
-                            color = color.copy(alpha = (alpha + if (highlighted) pulse * 0.6f else 0f).coerceIn(0f, 1f)),
-                            radius = star.size.dp.toPx() * (1f + drift + if (highlighted) pulse * 0.5f else 0f),
+                            brush = Brush.radialGradient(
+                                listOf(HunterCyan.copy(alpha = pulse * 0.5f), Color.Transparent),
+                                center = point,
+                                radius = star.size.dp.toPx() * 8f
+                            ),
+                            radius = star.size.dp.toPx() * 8f,
                             center = point
                         )
-                        
-                        // Atom highlights during melody
-                        if (highlighted && expansion > 0f) {
-                            drawCircle(
-                                brush = Brush.radialGradient(
-                                    listOf(HunterCyan.copy(alpha = pulse * 0.5f), Color.Transparent),
-                                    center = point,
-                                    radius = star.size.dp.toPx() * 8f
-                                ),
-                                radius = star.size.dp.toPx() * 8f,
-                                center = point
-                            )
-                            drawCircle(
-                                color = Color.White.copy(alpha = pulse),
-                                radius = star.size.dp.toPx() * (2.5f + pulse),
-                                center = point,
-                                style = Stroke(width = 2.dp.toPx())
-                            )
-                        }
+                        drawCircle(
+                            color = Color.White.copy(alpha = pulse),
+                            radius = star.size.dp.toPx() * (2.5f + pulse),
+                            center = point,
+                            style = Stroke(width = 2.dp.toPx())
+                        )
                     }
                 }
 
-                // Global pulse from melody
                 if (pulse > 0f && expansion > 0.5f) {
                     drawCircle(
                         color = HunterTurquoise.copy(alpha = pulse * 0.5f),

@@ -49,13 +49,15 @@ class AudioEngine {
 
             val progress = currentSample.toFloat() / totalSamples
             val currentFrequency = if (waveform == Waveform.KICK) {
-                frequency * (1f - 0.82f * progress)
+                // Softer pitch envelope for ambient thud instead of sharp EDM kick
+                frequency * (1f + 1.5f * kotlin.math.exp(-progress * 8.0).toFloat())
             } else frequency
             phase += 2.0 * Math.PI * currentFrequency / sampleRate
             if (phase >= 2.0 * Math.PI) phase -= 2.0 * Math.PI
             val normalizedPhase = phase / (2.0 * Math.PI)
             val oscillator = when (waveform) {
-                Waveform.SINE, Waveform.KICK -> sin(phase)
+                Waveform.SINE -> sin(phase)
+                Waveform.KICK -> sin(phase) // Softer sine-based kick
                 Waveform.SAW -> 2.0 * normalizedPhase - 1.0
                 Waveform.TRIANGLE -> 1.0 - 4.0 * kotlin.math.abs(normalizedPhase - 0.5)
                 Waveform.NOISE -> {
@@ -230,28 +232,29 @@ class AudioEngine {
     private fun playCompositionLead(note: TrackNote, tempoMultiplier: Float = 1f) {
         val energy = 0.55f + note.precision * 0.45f
         val dur = (note.durationMs / tempoMultiplier).toLong()
-        playSynthVoice(note.fundamentalHz, dur, 0.12f * energy, Waveform.TRIANGLE)
-        playSynthVoice(note.bassHz, dur + 120L, 0.10f * energy, Waveform.SAW)
-        // High-energy overtones and fifths
-        playSynthVoice(note.fundamentalHz * 1.5f, dur + 100L, 0.045f * energy, Waveform.SINE)
-        playSynthVoice(note.fundamentalHz * 2f, dur / 2L, 0.03f * energy, Waveform.SAW)
+        
+        // Deep ambient pads (SINE waves to avoid metallic sound)
+        playSynthVoice(note.fundamentalHz, dur + 600L, 0.16f * energy, Waveform.SINE)
+        playSynthVoice(note.bassHz, dur + 1000L, 0.14f * energy, Waveform.SINE)
+        // Ethereal overtones
+        playSynthVoice(note.fundamentalHz * 1.5f, dur + 400L, 0.05f * energy, Waveform.SINE)
+        playSynthVoice(note.fundamentalHz * 2f, dur + 200L, 0.03f * energy, Waveform.SINE)
     }
 
     private fun playSoftBeat() {
-        // Punchy EDM Kick
-        playSynthVoice(55f, 300L, 0.22f, Waveform.KICK)
-        playSynthVoice(120f, 50L, 0.08f, Waveform.NOISE)
+        // Deep ambient heartbeat thud
+        playSynthVoice(45f, 600L, 0.25f, Waveform.KICK)
+        playSynthVoice(90f, 800L, 0.10f, Waveform.SINE)
     }
 
     private fun playSoftAccent() {
-        // Sharp Hi-Hat
-        playSynthVoice(6000f, 40L, 0.06f, Waveform.NOISE)
+        // Soft atmospheric drone
+        playSynthVoice(220f, 1500L, 0.03f, Waveform.SINE)
     }
 
     private fun playSnare() {
-        // Synthetic Snare/Clap
-        playSynthVoice(200f, 150L, 0.15f, Waveform.NOISE)
-        playSynthVoice(250f, 100L, 0.08f, Waveform.TRIANGLE)
+        // Replaced snare with a low textural rumble
+        playSynthVoice(110f, 1200L, 0.06f, Waveform.NOISE)
     }
 
     suspend fun playComposition(
@@ -262,7 +265,7 @@ class AudioEngine {
         isMelodyPlaying = true
         var noteIndex = 0
         var nextBeat = 0L
-        val tempoMultiplier = 2.0f // 100% faster (Double Time action!)
+        val tempoMultiplier = 0.7f // Slower, relaxed ambient pace
         val startedAt = System.nanoTime() / 1_000_000L
         val finalOnset = notes.last().onsetMs + notes.last().durationMs + 100L
 
@@ -270,7 +273,7 @@ class AudioEngine {
             val realElapsed = (System.nanoTime() / 1_000_000L - startedAt).coerceAtLeast(0L)
             val elapsed = (realElapsed * tempoMultiplier).toLong()
 
-            if (elapsed > finalOnset + 1000L) break
+            if (elapsed > finalOnset + 1500L) break
 
             while (noteIndex < notes.size && notes[noteIndex].onsetMs <= elapsed) {
                 val note = notes[noteIndex]
@@ -279,18 +282,13 @@ class AudioEngine {
                 noteIndex++
             }
 
-            // High-octane 4-to-the-floor beat
-            val beatInterval = 180L // ~166 BPM equivalent at base speed, but effectively ~330 BPM
+            // Slow ambient drone/heartbeat
+            val beatInterval = 1000L // 1 second per pulse
             val beat = elapsed / beatInterval
             if (beat >= nextBeat) {
                 when (beat % 4L) {
-                    0L -> {
+                    0L, 2L -> {
                         playSoftBeat()
-                        playSoftAccent()
-                    }
-                    2L -> {
-                        playSnare()
-                        playSoftAccent()
                     }
                     1L, 3L -> {
                         playSoftAccent()
@@ -298,7 +296,7 @@ class AudioEngine {
                 }
                 nextBeat = beat + 1L
             }
-            delay(10L) // Faster polling for tight rhythm
+            delay(20L)
         }
         isMelodyPlaying = false
     }
