@@ -1343,5 +1343,6 @@ fun ResultScreen(
 private fun galaxyColor(symbol: String): Color = when (symbol) {
     "H", "N", "O" -> HunterCyan
     "He", "C" -> HunterViolet
+    "Au", "S" -> Color(0xFFFFD500) // Bright Yellow
     else -> HunterMetal
 }

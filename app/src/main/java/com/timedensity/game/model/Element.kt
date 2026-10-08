@@ -8,7 +8,9 @@ enum class Element(val symbol: String, val frequency: Float, val color: Color) {
     C("C", 293f, Color(0xFFB9C8D3)),
     N("N", 261f, Color(0xFF13B8B1)),
     O("O", 220f, Color(0xFF6AC9D3)),
-    Fe("Fe", 110f, Color(0xFF91A1AE))
+    Fe("Fe", 110f, Color(0xFF91A1AE)),
+    Au("Au", 330f, Color(0xFFFFD500)), // Bright Yellow
+    S("S", 440f, Color(0xFFFFEA00))    // Lighter Yellow
 }
 
 data class Atom(

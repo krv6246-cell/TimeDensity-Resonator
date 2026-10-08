@@ -399,7 +399,7 @@ class GameEngine : ViewModel() {
     }
 
     private companion object {
-        const val MAX_LIVE_ATOMS = 4
+        const val MAX_LIVE_ATOMS = 6
         const val SPAWN_INTERVAL_SECONDS = 2.4f
     }
 }
