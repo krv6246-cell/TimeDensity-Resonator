@@ -227,25 +227,19 @@ class AudioEngine {
         activeVoices.add(ToneVoice(safeFrequency, totalSamples, 0, amplitude, waveform))
     }
 
-    private fun playIndustrialKick() {
-        playSynthVoice(128f, 220L, 0.24f, Waveform.KICK)
-        playSynthVoice(64f, 260L, 0.11f, Waveform.SINE)
+    private fun playSoftBeat() {
+        playSynthVoice(92f, 300L, 0.055f, Waveform.SINE)
     }
 
-    private fun playIndustrialHit() {
-        playSynthVoice(190f, 110L, 0.08f, Waveform.TRIANGLE)
-        playSynthVoice(5_200f, 75L, 0.045f, Waveform.NOISE)
-    }
-
-    private fun playHiHat() {
-        playSynthVoice(7_800f, 45L, 0.035f, Waveform.NOISE)
+    private fun playSoftAccent() {
+        playSynthVoice(146.83f, 220L, 0.025f, Waveform.SINE)
     }
 
     private fun playCompositionLead(note: TrackNote) {
         val energy = 0.55f + note.precision * 0.45f
-        playSynthVoice(note.fundamentalHz, note.durationMs, 0.15f * energy, Waveform.TRIANGLE)
-        playSynthVoice(note.bassHz, note.durationMs + 80L, 0.10f * energy, Waveform.SINE)
-        playSynthVoice(note.fundamentalHz * 2f, note.durationMs / 2L, 0.035f * energy, Waveform.SINE)
+        playSynthVoice(note.fundamentalHz, note.durationMs, 0.10f * energy, Waveform.SINE)
+        playSynthVoice(note.bassHz, note.durationMs + 80L, 0.05f * energy, Waveform.SINE)
+        playSynthVoice(note.fundamentalHz * 2f, note.durationMs / 2L, 0.012f * energy, Waveform.SINE)
     }
 
     suspend fun playComposition(
@@ -256,7 +250,6 @@ class AudioEngine {
         isMelodyPlaying = true
         var noteIndex = 0
         var nextBeat = 0L
-        var nextHat = 0L
         val startedAt = System.nanoTime() / 1_000_000L
         val finalOnset = notes.last().onsetMs + notes.last().durationMs + 100L
         while (isMelodyPlaying && isPlaying) {
@@ -272,13 +265,8 @@ class AudioEngine {
 
             val beat = elapsed / 500L
             if (beat >= nextBeat) {
-                if (beat % 4L == 0L || beat % 4L == 2L) playIndustrialKick() else playIndustrialHit()
+                if (beat % 4L == 0L || beat % 4L == 2L) playSoftBeat() else playSoftAccent()
                 nextBeat = beat + 1L
-            }
-            val hat = elapsed / 250L
-            if (hat >= nextHat) {
-                playHiHat()
-                nextHat = hat + 1L
             }
             delay(20L)
         }

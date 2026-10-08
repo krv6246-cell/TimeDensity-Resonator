@@ -35,9 +35,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
@@ -338,6 +340,16 @@ fun GameScreen(engine: GameEngine, onExit: () -> Unit) {
     val targetAtomId by engine.targetAtomId.collectAsState()
     
     val reducedMotion = remember { reducedMotionEnabled() }
+    val compactLayout = LocalConfiguration.current.screenHeightDp < 700
+    val density = LocalDensity.current
+    var topOverlayHeight by remember { mutableIntStateOf(0) }
+    var bottomOverlayHeight by remember { mutableIntStateOf(0) }
+    val topInset = with(density) { topOverlayHeight.toDp() }
+    val bottomInset = if (phase == GamePhase.PLAYING) {
+        with(density) { bottomOverlayHeight.toDp() }
+    } else {
+        0.dp
+    }
     val bhPulse = if (reducedMotion) 1f else {
         val pulse by rememberInfiniteTransition("bhPulse").animateFloat(
             initialValue = 0.95f,
@@ -357,7 +369,11 @@ fun GameScreen(engine: GameEngine, onExit: () -> Unit) {
         )
 
         // Main game canvas for atoms & black hole
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = topInset, bottom = bottomInset)
+        ) {
             val centerX = size.width / 2
             val centerY = size.height / 2
             val fieldScale = minOf(size.width, size.height) * 0.38f / 300.dp.toPx()
@@ -528,6 +544,7 @@ fun GameScreen(engine: GameEngine, onExit: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
+                .onSizeChanged { topOverlayHeight = it.height }
         ) {
             // COMPACT TOP HUD
             Row(
@@ -541,7 +558,12 @@ fun GameScreen(engine: GameEngine, onExit: () -> Unit) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 24.dp, end = 24.dp, top = 48.dp, bottom = 16.dp),
+                    .padding(
+                        start = 24.dp,
+                        end = 24.dp,
+                        top = if (compactLayout) 12.dp else 48.dp,
+                        bottom = if (compactLayout) 8.dp else 16.dp
+                    ),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -579,7 +601,11 @@ fun GameScreen(engine: GameEngine, onExit: () -> Unit) {
             }
 
             if (phase == GamePhase.PLAYING || phase == GamePhase.COLLAPSE) {
-                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .height(if (compactLayout) 82.dp else 110.dp)
+                ) {
                     WaveformDisplay(target = target, carrier = carrier, resPhase = resPhase)
                 }
             }
@@ -602,12 +628,19 @@ fun GameScreen(engine: GameEngine, onExit: () -> Unit) {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(bottom = 48.dp, start = 24.dp, end = 24.dp)
+                    .padding(
+                        bottom = if (compactLayout) 12.dp else 48.dp,
+                        start = 24.dp,
+                        end = 24.dp
+                    )
+                    .onSizeChanged { bottomOverlayHeight = it.height }
             ) {
                 // ATOM VAULT INDICATOR
                 val stats by engine.stabilizedCount.collectAsState()
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = if (compactLayout) 10.dp else 24.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     Element.values().forEach { el ->
@@ -658,7 +691,7 @@ fun GameScreen(engine: GameEngine, onExit: () -> Unit) {
                 }
 
                 LazyRow(
-                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    modifier = Modifier.fillMaxWidth().height(if (compactLayout) 40.dp else 44.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
@@ -686,7 +719,7 @@ fun GameScreen(engine: GameEngine, onExit: () -> Unit) {
                     onFreqChange = { engine.setCarrierFreq(it) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp)
+                        .height(if (compactLayout) 48.dp else 54.dp)
                 )
             }
         }
@@ -878,27 +911,9 @@ fun TuneSlider(target: Float, carrier: Float, onFreqChange: (Float) -> Unit, mod
     val minFreq = 100f
     val maxFreq = 700f
     val range = maxFreq - minFreq
-    val reducedMotion = remember { reducedMotionEnabled() }
     var isDragging by remember { mutableStateOf(false) }
     val currentPos = ((carrier - minFreq) / range).coerceIn(0f, 1f)
     val thumbPosition by animateFloatAsState(currentPos, animationSpec = tween(90), label = "tuner_thumb")
-    val proximity = if (target > 0f) (1f - abs(carrier - target) / 90f).coerceIn(0f, 1f) else 0f
-    val tunerPulse = if (proximity > 0.65f && !reducedMotion) {
-        val pulse by rememberInfiniteTransition(label = "tuner_match").animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
-            label = "tuner_match_pulse"
-        )
-        pulse
-    } else {
-        0f
-    }
-    val tuningColor = when {
-        proximity >= 0.92f -> HunterTurquoise
-        proximity >= 0.65f -> HunterCyan
-        else -> Color.White
-    }
 
     Box(
         modifier = modifier
@@ -959,42 +974,17 @@ fun TuneSlider(target: Float, carrier: Float, onFreqChange: (Float) -> Unit, mod
                 )
             }
             
-            if (target > 0f) {
-                val targetPos = ((target - minFreq) / range).coerceIn(0f, 1f)
-                val targetX = targetPos * size.width
-                val zoneWidth = (60f / range) * size.width
-                val targetColor = if (proximity >= 0.65f) HunterTurquoise else HunterViolet
-                
-                drawRect(
-                    color = targetColor.copy(alpha = 0.28f + proximity * 0.18f),
-                    topLeft = Offset(targetX - zoneWidth / 2, midY - trackHeight),
-                    size = Size(zoneWidth, trackHeight * 2)
-                )
-                
-                drawCircle(
-                    color = targetColor.copy(alpha = 0.2f + tunerPulse * 0.22f),
-                    radius = 8.dp.toPx() + tunerPulse * 5.dp.toPx(),
-                    center = Offset(targetX, midY)
-                )
-                drawLine(
-                    color = targetColor,
-                    start = Offset(targetX, midY - trackHeight * 1.5f),
-                    end = Offset(targetX, midY + trackHeight * 1.5f),
-                    strokeWidth = 2.dp.toPx() + proximity * 1.5.dp.toPx()
-                )
-            }
-            
             val thumbX = thumbPosition * size.width
-            val thumbRadius = (if (isDragging) 20.dp.toPx() else 16.dp.toPx()) + tunerPulse * 2.dp.toPx()
+            val thumbRadius = if (isDragging) 20.dp.toPx() else 16.dp.toPx()
             
             drawCircle(
-                color = tuningColor.copy(alpha = 0.25f + proximity * 0.3f),
-                radius = thumbRadius * (1.5f + tunerPulse * 0.35f),
+                color = HunterCyan.copy(alpha = 0.4f),
+                radius = thumbRadius * 1.5f,
                 center = Offset(thumbX, midY)
             )
             
             drawCircle(
-                color = tuningColor,
+                color = HunterCyan,
                 radius = thumbRadius,
                 center = Offset(thumbX, midY)
             )
@@ -1020,10 +1010,25 @@ fun ResultScreen(
     val galaxyStars = remember(session) { UniverseLayout.generate(session, maxParticles = 1_400) }
     val atomStars = remember(galaxyStars) { galaxyStars.filter { it.isAtom } }
     val reducedMotion = remember { reducedMotionEnabled() }
+    val galaxyRotation = if (reducedMotion) 0f else {
+        val rotation by rememberInfiniteTransition(label = "galaxy_drift").animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                tween(durationMillis = 180_000, easing = LinearEasing)
+            ),
+            label = "galaxy_rotation"
+        )
+        rotation
+    }
 
     var hasPlayed by remember(session) { mutableStateOf(false) }
     var animTrigger by remember { mutableStateOf(0) }
     val animProgress = remember { Animatable(0f) }
+
+    DisposableEffect(engine) {
+        onDispose { engine.stopResultMelody() }
+    }
 
     LaunchedEffect(session) {
         if (session.events.isNotEmpty()) {
@@ -1075,7 +1080,11 @@ fun ResultScreen(
                 .clip(RoundedCornerShape(20.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { rotationZ = galaxyRotation }
+            ) {
                 val center = Offset(size.width / 2, size.height / 2)
                 val maxRadius = minOf(size.width * 0.49f, size.height * 0.49f)
                 val progress = animProgress.value
