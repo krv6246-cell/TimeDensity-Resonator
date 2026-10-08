@@ -365,7 +365,10 @@ fun GameScreen(engine: GameEngine, onExit: () -> Unit) {
             atoms = atoms,
             resonancePhase = resPhase,
             targetAtomId = targetAtomId,
-            matchPercent = match
+            matchPercent = match,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = topInset, bottom = bottomInset)
         )
 
         // Main game canvas for atoms & black hole
@@ -734,7 +737,8 @@ fun GravityGrid(
     atoms: List<Atom>,
     resonancePhase: ResonancePhase,
     targetAtomId: Int? = null,
-    matchPercent: Int = 0
+    matchPercent: Int = 0,
+    modifier: Modifier = Modifier
 ) {
     val reducedMotion = remember { reducedMotionEnabled() }
     val animatedPhase = if (reducedMotion) 0f else {
@@ -746,7 +750,7 @@ fun GravityGrid(
         )
         phase
     }
-    Canvas(modifier = Modifier.fillMaxSize()) {
+    Canvas(modifier = modifier) {
         val phase = animatedPhase
         val center = Offset(size.width / 2f, size.height / 2f)
         drawRect(Brush.verticalGradient(listOf(HunterBackground, Color(0xFF071321), HunterBackground)))
