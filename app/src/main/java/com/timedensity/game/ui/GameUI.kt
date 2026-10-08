@@ -838,7 +838,7 @@ fun WaveformDisplay(target: Float, carrier: Float, resPhase: ResonancePhase = Re
     }
     
     val targetColor = HunterViolet
-    val carrierColor = HunterCyan
+    val carrierColor = Color(0xFFFFD500) // Bright Yellow for the player's carrier line
     
     val glowColor = when(resPhase) {
         ResonancePhase.STABLE -> HunterTurquoise
