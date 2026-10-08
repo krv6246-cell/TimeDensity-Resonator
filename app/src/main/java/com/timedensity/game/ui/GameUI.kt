@@ -179,6 +179,21 @@ fun StartScreen(
         scale to rotate
     }
 
+    var isStarting by remember { mutableStateOf(false) }
+    val entranceAnim = remember { Animatable(0f) }
+
+    LaunchedEffect(isStarting) {
+        if (isStarting) {
+            entranceAnim.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 1500, easing = FastOutSlowInEasing)
+            )
+            onStart()
+        }
+    }
+
+    val fadeOutAlpha = 1f - entranceAnim.value
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -186,7 +201,10 @@ fun StartScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.graphicsLayer { alpha = fadeOutAlpha }
+        ) {
             Text(text = "∞", fontSize = 34.sp, color = HunterCyan, fontWeight = FontWeight.Light)
             Spacer(modifier = Modifier.height(4.dp))
             Text(text = "TIME  /  DENSITY", fontSize = 11.sp, color = HunterMetal, letterSpacing = 3.sp)
@@ -194,7 +212,10 @@ fun StartScreen(
         
         Spacer(modifier = Modifier.weight(1f))
         
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.graphicsLayer { alpha = fadeOutAlpha }
+        ) {
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(18.dp))
@@ -208,29 +229,36 @@ fun StartScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    val brightYellow = Color(0xFFFFD500)
                     Text(
                         text = "ATOM",
-                        color = HunterCyan,
-                        style = AtomHunterWordmarkStyle.copy(
+                        style = androidx.compose.ui.text.TextStyle(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(Color(0xFFFFF7A1), brightYellow, Color(0xFFFF8C00))
+                            )
+                        ).merge(AtomHunterWordmarkStyle.copy(
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Black,
                             fontSize = if (compactLayout) 44.sp else 58.sp,
                             letterSpacing = 5.sp,
                             lineHeight = if (compactLayout) 48.sp else 62.sp,
-                            shadow = Shadow(HunterCyan.copy(alpha = 0.7f), blurRadius = 18f)
-                        )
+                            shadow = Shadow(brightYellow.copy(alpha = 0.5f), blurRadius = 24f)
+                        ))
                     )
                     Text(
                         text = "HUNTER",
-                        color = HunterViolet,
-                        style = AtomHunterWordmarkStyle.copy(
+                        style = androidx.compose.ui.text.TextStyle(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(HunterCyan, HunterTurquoise, HunterViolet)
+                            )
+                        ).merge(AtomHunterWordmarkStyle.copy(
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Black,
                             fontSize = if (compactLayout) 30.sp else 38.sp,
                             letterSpacing = 7.sp,
                             lineHeight = if (compactLayout) 34.sp else 42.sp,
-                            shadow = Shadow(HunterViolet.copy(alpha = 0.65f), blurRadius = 16f)
-                        )
+                            shadow = Shadow(HunterCyan.copy(alpha = 0.55f), blurRadius = 16f)
+                        ))
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
@@ -253,7 +281,16 @@ fun StartScreen(
         
         Spacer(modifier = Modifier.weight(1.5f))
         
-        Canvas(modifier = Modifier.size(if (compactLayout) 128.dp else 160.dp)) {
+        Canvas(modifier = Modifier
+            .size(if (compactLayout) 128.dp else 160.dp)
+            .graphicsLayer {
+                val animScale = 1f + (entranceAnim.value * 25f)
+                scaleX = animScale
+                scaleY = animScale
+                rotationX = 45f * entranceAnim.value // Slight 3D tilt as we fall into it
+                alpha = (1f - (entranceAnim.value * 0.1f)).coerceIn(0f, 1f)
+            }
+        ) {
             val center = Offset(size.width / 2, size.height / 2)
             val radius = size.width / 2 * scale
             
@@ -307,16 +344,23 @@ fun StartScreen(
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Button(
-            onClick = onStart,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = HunterTurquoise)
+        
+        Column(
+            modifier = Modifier.graphicsLayer { alpha = fadeOutAlpha },
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("BEGIN HUNT", letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
+            Button(
+                onClick = { isStarting = true },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = HunterTurquoise)
+            ) {
+                Text("BEGIN HUNT", letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
+            }
+            TextButton(onClick = onExit) {
+                Text("EXIT", color = HunterMetal, letterSpacing = 2.sp)
+            }
         }
-        TextButton(onClick = onExit) {
-            Text("EXIT", color = HunterMetal, letterSpacing = 2.sp)
-        }
+
         if (canSaveSession) {
             TextButton(onClick = onSaveSession) {
                 Text("SAVE LAST SESSION", color = HunterCyan, fontSize = 11.sp, letterSpacing = 1.sp)

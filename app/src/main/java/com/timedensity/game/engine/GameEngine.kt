@@ -79,6 +79,10 @@ class GameEngine : ViewModel() {
     private var random = Random(42)
     private var sessionStartedAt = 0L
 
+    init {
+        audioEngine.startAmbientPhase()
+    }
+
     private var gameJob: Job? = null
     private var melodyJob: Job? = null
     private var collapseJob: Job? = null
@@ -106,6 +110,7 @@ class GameEngine : ViewModel() {
         lastActiveAtomId = null
 
         adapter.reset()
+        audioEngine.stopAmbientPhase()
         audioEngine.start()
         audioEngine.setCarrierFrequency(_carrierFreq.value)
         audioEngine.clearTones()
@@ -371,6 +376,7 @@ class GameEngine : ViewModel() {
         stopResultMelody()
         _phase.value = GamePhase.START
         audioEngine.stop()
+        audioEngine.startAmbientPhase()
         adapter.reset()
         lastActiveAtomId = null
         _targetAtomId.value = null

@@ -127,21 +127,41 @@ class AudioEngine {
             var angleCarrier = 0.0
             var angleTarget = 0.0
             var angleDrone = 0.0
+            var angleAmbient = 0.0
 
             val twoPi = 2.0 * Math.PI
 
             while (isPlaying) {
                 for (i in buffer.indices) {
-                    // Subdued 50Hz drone
-                    val droneSample = sin(angleDrone) * 0.03
+                    var sum = 0.0
+                    
+                    if (isAmbientPhase) {
+                        // Ominous, swirling black hole ambient drone for the start screen
+                        val baseDrone = sin(angleAmbient) * 0.12
+                        val subRumble = sin(angleAmbient * 0.4) * 0.08
+                        val sweep = sin(angleAmbient * 2.5 + sin(angleAmbient * 0.1)) * 0.04
+                        sum = baseDrone + subRumble + sweep
+                        
+                        angleAmbient += twoPi * 42.0 / sampleRate // Deep 42Hz fundamental
+                        if (angleAmbient >= twoPi) angleAmbient -= twoPi
+                    } else {
+                        // In-game signals
+                        val droneSample = sin(angleDrone) * 0.03
+                        val carrierSample = sin(angleCarrier) * 0.08
+                        val targetSample = if (targetFreq > 0f) sin(angleTarget) * 0.08 else 0.0
+                        sum = droneSample + carrierSample + targetSample
 
-                    // Subdued Carrier
-                    val carrierSample = sin(angleCarrier) * 0.08
+                        angleDrone += twoPi * 50.0 / sampleRate
+                        if (angleDrone >= twoPi) angleDrone -= twoPi
 
-                    // Subdued Target
-                    val targetSample = if (targetFreq > 0f) sin(angleTarget) * 0.08 else 0.0
+                        angleCarrier += twoPi * carrierFreq / sampleRate
+                        if (angleCarrier >= twoPi) angleCarrier -= twoPi
 
-                    var sum = droneSample + carrierSample + targetSample
+                        if (targetFreq > 0f) {
+                            angleTarget += twoPi * targetFreq / sampleRate
+                            if (angleTarget >= twoPi) angleTarget -= twoPi
+                        }
+                    }
 
                     // Add active element tone voices
                     if (!activeVoices.isEmpty()) {
@@ -164,23 +184,22 @@ class AudioEngine {
                         Short.MAX_VALUE.toInt()
                     )
                     buffer[i] = pcmValue.toShort()
-
-                    // Keep phase angles within [0, 2π) to prevent double precision loss over time
-                    angleDrone += twoPi * 50.0 / sampleRate
-                    if (angleDrone >= twoPi) angleDrone -= twoPi
-
-                    angleCarrier += twoPi * carrierFreq / sampleRate
-                    if (angleCarrier >= twoPi) angleCarrier -= twoPi
-
-                    if (targetFreq > 0f) {
-                        angleTarget += twoPi * targetFreq / sampleRate
-                        if (angleTarget >= twoPi) angleTarget -= twoPi
-                    }
                 }
                 audioTrack?.write(buffer, 0, buffer.size)
             }
         }
         thread?.start()
+    }
+
+    @Volatile var isAmbientPhase = false
+
+    fun startAmbientPhase() {
+        isAmbientPhase = true
+        start()
+    }
+
+    fun stopAmbientPhase() {
+        isAmbientPhase = false
     }
 
     fun setCarrierFrequency(freq: Float) {
