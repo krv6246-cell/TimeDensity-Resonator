@@ -1057,7 +1057,7 @@ fun ResultScreen(
             initialValue = 0f,
             targetValue = 360f,
             animationSpec = infiniteRepeatable(
-                tween(durationMillis = 60_000, easing = LinearEasing)
+                tween(durationMillis = 15_000, easing = LinearEasing) // Fast spin!
             ),
             label = "galaxy_rotation"
         )
@@ -1086,8 +1086,8 @@ fun ResultScreen(
         } else {
             animProgress.animateTo(
                 targetValue = 1f,
-                // Make the timeline slightly longer for more dramatic effect
-                animationSpec = tween(durationMillis = 3500, easing = FastOutSlowInEasing)
+                // Fast and punchy timeline
+                animationSpec = tween(durationMillis = 1500, easing = FastOutSlowInEasing)
             )
         }
     }
@@ -1097,7 +1097,7 @@ fun ResultScreen(
         if (playingIndex >= 0) {
             pulseAnim.snapTo(1f)
             if (reducedMotion) pulseAnim.snapTo(0f)
-            else pulseAnim.animateTo(0f, animationSpec = tween(350))
+            else pulseAnim.animateTo(0f, animationSpec = tween(150)) // Fast sharp pulse
         }
     }
 

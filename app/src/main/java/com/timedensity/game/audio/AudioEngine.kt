@@ -227,23 +227,31 @@ class AudioEngine {
         activeVoices.add(ToneVoice(safeFrequency, totalSamples, 0, amplitude, waveform))
     }
 
-    private fun playCompositionLead(note: TrackNote) {
+    private fun playCompositionLead(note: TrackNote, tempoMultiplier: Float = 1f) {
         val energy = 0.55f + note.precision * 0.45f
-        playSynthVoice(note.fundamentalHz, note.durationMs, 0.12f * energy, Waveform.TRIANGLE)
-        playSynthVoice(note.bassHz, note.durationMs + 120L, 0.08f * energy, Waveform.SAW)
-        // Add a nice ambient fifth harmony pad
-        playSynthVoice(note.fundamentalHz * 1.5f, note.durationMs + 200L, 0.035f * energy, Waveform.SINE)
-        playSynthVoice(note.fundamentalHz * 2f, note.durationMs / 2L, 0.02f * energy, Waveform.SINE)
+        val dur = (note.durationMs / tempoMultiplier).toLong()
+        playSynthVoice(note.fundamentalHz, dur, 0.12f * energy, Waveform.TRIANGLE)
+        playSynthVoice(note.bassHz, dur + 120L, 0.10f * energy, Waveform.SAW)
+        // High-energy overtones and fifths
+        playSynthVoice(note.fundamentalHz * 1.5f, dur + 100L, 0.045f * energy, Waveform.SINE)
+        playSynthVoice(note.fundamentalHz * 2f, dur / 2L, 0.03f * energy, Waveform.SAW)
     }
 
     private fun playSoftBeat() {
-        playSynthVoice(55f, 400L, 0.15f, Waveform.KICK)
-        playSynthVoice(220f, 100L, 0.02f, Waveform.NOISE)
+        // Punchy EDM Kick
+        playSynthVoice(55f, 300L, 0.22f, Waveform.KICK)
+        playSynthVoice(120f, 50L, 0.08f, Waveform.NOISE)
     }
 
     private fun playSoftAccent() {
-        playSynthVoice(146.83f, 250L, 0.05f, Waveform.TRIANGLE)
-        playSynthVoice(440f, 80L, 0.015f, Waveform.NOISE)
+        // Sharp Hi-Hat
+        playSynthVoice(6000f, 40L, 0.06f, Waveform.NOISE)
+    }
+
+    private fun playSnare() {
+        // Synthetic Snare/Clap
+        playSynthVoice(200f, 150L, 0.15f, Waveform.NOISE)
+        playSynthVoice(250f, 100L, 0.08f, Waveform.TRIANGLE)
     }
 
     suspend fun playComposition(
@@ -254,25 +262,43 @@ class AudioEngine {
         isMelodyPlaying = true
         var noteIndex = 0
         var nextBeat = 0L
+        val tempoMultiplier = 2.0f // 100% faster (Double Time action!)
         val startedAt = System.nanoTime() / 1_000_000L
         val finalOnset = notes.last().onsetMs + notes.last().durationMs + 100L
+
         while (isMelodyPlaying && isPlaying) {
-            val elapsed = (System.nanoTime() / 1_000_000L - startedAt).coerceAtLeast(0L)
-            if (elapsed > finalOnset) break
+            val realElapsed = (System.nanoTime() / 1_000_000L - startedAt).coerceAtLeast(0L)
+            val elapsed = (realElapsed * tempoMultiplier).toLong()
+
+            if (elapsed > finalOnset + 1000L) break
 
             while (noteIndex < notes.size && notes[noteIndex].onsetMs <= elapsed) {
                 val note = notes[noteIndex]
                 onNotePlayed(note.eventIndex, note.elementSymbol)
-                playCompositionLead(note)
+                playCompositionLead(note, tempoMultiplier)
                 noteIndex++
             }
 
-            val beat = elapsed / 500L
+            // High-octane 4-to-the-floor beat
+            val beatInterval = 180L // ~166 BPM equivalent at base speed, but effectively ~330 BPM
+            val beat = elapsed / beatInterval
             if (beat >= nextBeat) {
-                if (beat % 4L == 0L || beat % 4L == 2L) playSoftBeat() else playSoftAccent()
+                when (beat % 4L) {
+                    0L -> {
+                        playSoftBeat()
+                        playSoftAccent()
+                    }
+                    2L -> {
+                        playSnare()
+                        playSoftAccent()
+                    }
+                    1L, 3L -> {
+                        playSoftAccent()
+                    }
+                }
                 nextBeat = beat + 1L
             }
-            delay(20L)
+            delay(10L) // Faster polling for tight rhythm
         }
         isMelodyPlaying = false
     }
