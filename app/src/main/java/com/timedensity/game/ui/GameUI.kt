@@ -232,33 +232,33 @@ fun StartScreen(
                     val brightYellow = Color(0xFFFFD500)
                     Text(
                         text = "ATOM",
-                        style = androidx.compose.ui.text.TextStyle(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(Color(0xFFFFF7A1), brightYellow, Color(0xFFFF8C00))
-                            )
-                        ).merge(AtomHunterWordmarkStyle.copy(
+                        color = Color.Unspecified,
+                        style = AtomHunterWordmarkStyle.copy(
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Black,
                             fontSize = if (compactLayout) 44.sp else 58.sp,
                             letterSpacing = 5.sp,
                             lineHeight = if (compactLayout) 48.sp else 62.sp,
-                            shadow = Shadow(brightYellow.copy(alpha = 0.5f), blurRadius = 24f)
-                        ))
+                            shadow = Shadow(brightYellow.copy(alpha = 0.5f), blurRadius = 24f),
+                            brush = Brush.verticalGradient(
+                                colors = listOf(Color(0xFFFFF7A1), brightYellow, Color(0xFFFF8C00))
+                            )
+                        )
                     )
                     Text(
                         text = "HUNTER",
-                        style = androidx.compose.ui.text.TextStyle(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(HunterCyan, HunterTurquoise, HunterViolet)
-                            )
-                        ).merge(AtomHunterWordmarkStyle.copy(
+                        color = Color.Unspecified,
+                        style = AtomHunterWordmarkStyle.copy(
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Black,
                             fontSize = if (compactLayout) 30.sp else 38.sp,
                             letterSpacing = 7.sp,
                             lineHeight = if (compactLayout) 34.sp else 42.sp,
-                            shadow = Shadow(HunterCyan.copy(alpha = 0.55f), blurRadius = 16f)
-                        ))
+                            shadow = Shadow(HunterCyan.copy(alpha = 0.55f), blurRadius = 16f),
+                            brush = Brush.verticalGradient(
+                                colors = listOf(HunterCyan, HunterTurquoise, HunterViolet)
+                            )
+                        )
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
@@ -1151,11 +1151,18 @@ fun ResultScreen(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        val brightYellow = Color(0xFFFFD500)
         Text(
             text = "ATOM HUNTER",
-            fontSize = 18.sp,
-            color = HunterCyan,
-            style = AtomHunterWordmarkStyle.copy(fontSize = 18.sp, letterSpacing = 3.sp),
+            color = Color.Unspecified,
+            style = AtomHunterWordmarkStyle.copy(
+                fontSize = 18.sp, 
+                letterSpacing = 3.sp,
+                shadow = Shadow(brightYellow.copy(alpha = 0.4f), blurRadius = 12f),
+                brush = Brush.horizontalGradient(
+                    colors = listOf(Color(0xFFFFF7A1), brightYellow, HunterCyan, HunterViolet)
+                )
+            ),
             modifier = Modifier.padding(vertical = 6.dp)
         )
 
